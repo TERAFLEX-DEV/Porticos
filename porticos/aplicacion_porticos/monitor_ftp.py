@@ -8,17 +8,27 @@ class MyHandler(FileSystemEventHandler):
         print(f'Evento detectado: {event.event_type} - {event.src_path}')
 
 def main():
-    path = '.'  # Directorio a monitorear, puedes cambiarlo según tus necesidades
-    event_handler = MyHandler()
-    observer = Observer()
-    observer.schedule(event_handler, path, recursive=True)
-    observer.start()
+    paths = ['C:/FTP/TCM TRFX', 'C:/FTP/PTZ TRFX']  # Lista de directorios a monitorear, puedes cambiarlos según tus necesidades
+    event_handlers = []
+    observers = []
+
+    # Configurar un observador para cada carpeta
+    for path in paths:
+        event_handler = MyHandler()
+        observer = Observer()
+        observer.schedule(event_handler, path, recursive=True)
+        observer.start()
+        event_handlers.append(event_handler)
+        observers.append(observer)
+
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+        for observer in observers:
+            observer.stop()
+        for observer in observers:
+            observer.join()
 
 if __name__ == "__main__":
     main()

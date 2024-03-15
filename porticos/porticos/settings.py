@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'aplicacion_porticos',
 ]
 
 MIDDLEWARE = [
@@ -69,30 +70,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'porticos.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
 
 import pymysql
 pymysql.install_as_MySQLdb()
 
-#DATABASES = {
-#    'default': {
-#        'ENGINE': 'django.db.backends.mysql',
-#        'NAME': 'porticos2',
-#        'USER': 'admin',
-#        'PASSWORD': 'Teraf2022.',
-#        'HOST': 'porticos.chger7ymel2m.sa-east-1.rds.amazonaws.com',
-#        'PORT': '3306',
-#    }
-#}
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'porticos2',
+        'USER': 'admin',
+        'PASSWORD': 'Teraf2022.',
+        'HOST': 'porticos.chger7ymel2m.sa-east-1.rds.amazonaws.com',
+        'PORT': '3306',
+    }
+}
 
 
 # Password validation
