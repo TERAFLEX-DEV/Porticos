@@ -23,4 +23,5 @@ urlpatterns = [
     path('login/', views.login_user, name='login'),
     path('logout/', views.logout_user, name='logout'),
     path('csrf_endpoint/', views.get_csrf_token),
+    path('monitoreo_camaras/', views.monitoreo_principal)
 ]

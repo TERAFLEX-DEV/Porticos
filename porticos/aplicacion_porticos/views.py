@@ -5,8 +5,15 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.csrf import csrf_exempt
 from django.middleware.csrf import get_token
 import json
+from aplicacion_porticos import monitor_ftp
+from aplicacion_porticos.models import CarpetaUsuario
+from django.contrib.auth.decorators import login_required
+
+from aplicacion_porticos.consumers import PorticosConsumer
+
 
 # Create your views here.
+@csrf_exempt
 def get_csrf_token(request):
     csrf_token = get_token(request)
     # Puedes enviar el token CSRF como parte de la respuesta JSON
@@ -36,11 +43,34 @@ def login_user(request):
             login(request, user)
 
             r=True
+
             return JsonResponse(data={'r':r, 'user':user.username})
         else:
             return JsonResponse(data={'r':r, 'user':username})
 
 @csrf_exempt
 def logout_user(request):
+
+    usuario = request.user
+    
+    # Detener el monitoreo si está en curso para este usuario
+    monitor_ftp.detener_monitoreo_usuario(usuario)
+
     logout(request)
     return JsonResponse({'message':'Success'})
+
+@csrf_exempt
+def monitoreo_principal(request):
+    usuario = request.user  # Obtener el ID del usuario autenticado
+    r = True
+
+    carpetas_usuario = CarpetaUsuario.objects.filter(usuario=usuario)
+    paths = [cu.carpeta.nombre for cu in carpetas_usuario]
+
+    print(f'Carpetas: {paths}')
+    print(f'Usuario autenticado: {usuario.id}')
+
+    #paths = ['C:/FTP/TCM TRFX/', 'C:/FTP/PTZ TRFX/']  # Lista de directorios a monitorear, puedes cambiarlos según tus necesidades
+    monitor_ftp.iniciar_monitoreo_usuario(usuario, paths)
+    return JsonResponse({'data':r})
+

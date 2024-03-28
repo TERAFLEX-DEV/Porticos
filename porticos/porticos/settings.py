@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'aplicacion_porticos',
     'corsheaders',
+    'channels',
 ]
 
 MIDDLEWARE = [
@@ -71,6 +72,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'porticos.wsgi.application'
+ASGI_APPLICATION = 'porticos.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
@@ -157,3 +159,13 @@ CORS_ALLOW_METHODS = [
 ]
 
 APPEND_SLASH = False
+
+# Configuración SSL
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = True
+
+SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = False
+
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = False
