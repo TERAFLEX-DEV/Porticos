@@ -1,11 +1,16 @@
 import asyncio
 import base64
 from datetime import datetime
-from io import BytesIO
+import io
+import base64
+import time
+import cv2
 from django.utils import timezone
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from ftplib import FTP
+from datetime import date
+from datetime import timedelta
 
 from aplicacion_porticos.consumers import PorticosConsumer
 
@@ -16,20 +21,7 @@ class MyHandler(FileSystemEventHandler):
     instances = PorticosConsumer.instances  # Obtener la misma variable de instancisas
     def __init__(self, usuario):
         super().__init__()
-        self.ftp_host = '127.0.0.1'
-        self.ftp_user = 'teraflex'
-        self.ftp_passwd = 'Teraf2022.'
-        self.ftp = None
         self.usuario = usuario
-
-    def conectar_ftp(self):
-        self.ftp = FTP(self.ftp_host)
-        self.ftp.login(user=self.ftp_user, passwd=self.ftp_passwd)
-        print(f'Conexión FTP establecida')
-
-    def desconectar_ftp(self):
-        if self.ftp:
-            self.ftp.quit()
 
     def on_any_event(self, event):
         # Aquí puedes definir lo que deseas hacer cuando ocurra un evento
@@ -41,12 +33,11 @@ class MyHandler(FileSystemEventHandler):
             if archivo is None:
                 print("Archivo ignorado. No se procesará.")
             else:
-                print(f'Conectamos FTP')
-                #self.conectar_ftp()
+
+                time.sleep(0.5)
 
                 print(f'Descargamos imagen')
-                #image = self.descargar_imagen(carpeta, archivo) 
-                image=''
+                image = self.descargar_imagen(carpeta, archivo) 
 
                 print(f'Verificamos infracciones en patente')
                 infraccion = self.obtener_infraccion(patente)                
@@ -54,9 +45,44 @@ class MyHandler(FileSystemEventHandler):
                 print(f'---Creamos el modelo de Registro---')
                 registro = self.creacion_modelo(patente, carpeta, image, infraccion, fecha_hora_str, archivo)
 
+                print(f'---Consultamos ubicacion patente---')
+                a='C:/FTP/'+carpeta+'/'
+                camaras = Carpeta.objects.filter(nombre=a)
+
+                if camaras.exists():
+                    camara = camaras.first()
+                    ubicacion = camara.ubicacion
+                    #print(f'Ubicacion es: {ubicacion}')
+
+                print(f'---Consultamos patentes diarias leidas por usuario---')
+                total_patente = self.total_patentes_leidas()
+                print(f'Total patentes: {total_patente}')
+
+                print(f'---Consultamos infracciones diarias leidas por usuario---')
+                total_infracciones = self.total_infracciones_leidas()
+                print(f'Total infracciones: {total_infracciones}')
+
                 print(f'Enviamos notificación')
-                asyncio.run(self.enviar_notificacion(patente, image))
-            
+                asyncio.run(self.enviar_notificacion(patente, ubicacion, total_patente, total_infracciones, image))
+
+    def total_infracciones_leidas(self):
+        fecha_hoy = timezone.localtime(timezone.now())
+        inicio_dia = datetime.combine(fecha_hoy, datetime.min.time())
+        fin_dia = datetime.combine(fecha_hoy, datetime.max.time())
+
+        total_infracciones = Registro.objects.filter(fecha_hora__range=(inicio_dia, fin_dia), infraccion__in=[2, 3, 4]).count()
+
+        return total_infracciones
+
+    def total_patentes_leidas(self):
+        fecha_hoy = timezone.localtime(timezone.now())
+        inicio_dia = datetime.combine(fecha_hoy, datetime.min.time())
+        fin_dia = datetime.combine(fecha_hoy, datetime.max.time())
+
+        total_leidas = Registro.objects.filter(fecha_hora__range=(inicio_dia, fin_dia)).count()
+
+        return total_leidas
+                
     def creacion_modelo(self, patente, carpeta, image, infraccion, fecha_hora_str, archivo):
         path='C:/FTP/'+carpeta+'/'
         carpeta_usuario = Carpeta.objects.get(nombre=path)
@@ -85,20 +111,35 @@ class MyHandler(FileSystemEventHandler):
                 return registro
             
     def descargar_imagen(self, carpeta, archivo):
-        #print(f'---Descargamos imagen binaria---')
-        self.ftp.cwd(carpeta)
-        #print(f'{carpeta}')
-        with BytesIO() as file_content: #Descargamos la imagen
-            self.ftp.retrbinary(f"RETR {archivo}", file_content.write)
-            file_content.seek(0)
+        #ruta = 'C:/FTP/' + carpeta + '/' + archivo
+        #ruta = 'C:/FTP/TCM_TRFX/KYJX90_20240401142721209.jpg'
 
-            imagen_base64 = base64.b64encode(file_content.read()).decode('utf-8') #Tenemos la imagen de forma binaria
+        ruta = 'C:/FTP/' + carpeta + '/' + archivo
+        print(f'Ruta del archivo: {ruta}')
 
-        if imagen_base64: #Si la imagen se descargo de forma correcta
-            # print(f'---Imagen descargada correctamente---')
+        try:
+            # Leer la imagen con OpenCV
+            imagen = cv2.imread(ruta)
+
+            if imagen is None:
+                print(f'ERROR: No se pudo leer la imagen en {ruta}')
+                return None
+
+            # Convertir la imagen a formato de bytes
+            _, buffer = cv2.imencode('.jpg', imagen)
+
+            # Codificar la imagen en base64
+            imagen_base64 = base64.b64encode(buffer).decode('utf-8')
+
             print("Longitud de la imagen en base64:", len(imagen_base64))
-            file_content.seek(0)
             return imagen_base64
+
+        except FileNotFoundError:
+            print(f'ERROR: El archivo {ruta} no fue encontrado.')
+            return None
+        except Exception as e:
+            print(f'ERROR: Ocurrió un error al leer la imagen: {e}')
+            return None
 
     def creacion_variables(self, event):
         archivo = event.src_path.split("/")[-1]  # Obtenemos nombre de la imagen
@@ -118,10 +159,10 @@ class MyHandler(FileSystemEventHandler):
 
         return archivo, carpeta, patente, fecha_hora_str, ruta
 
-    async def enviar_notificacion(self, data, image):
+    async def enviar_notificacion(self, data, ubicacion, total_patentes, total_infracciones, image ):
         chat_consumer = self.obtener_chat_consumer(self.usuario.id)
         if chat_consumer:
-            await chat_consumer.enviar_notificacion(data, image
+            await chat_consumer.enviar_notificacion(data, ubicacion, total_patentes, total_infracciones, image 
             )
         #     print("Mensaje enviado desde ftp_monitor")
         # else:
@@ -154,20 +195,22 @@ def iniciar_monitoreo_usuario(usuario, carpetas):
     
     with MONITOREO_LOCK:
         if usuario.id not in MONITOREO_POR_USUARIO:
-            MONITOREO_POR_USUARIO[usuario.id] = []
+            MONITOREO_POR_USUARIO[usuario.id] = set()  # Utilizar un conjunto para almacenar las carpetas monitoreadas
 
-        observadores = []
+        observadores_activos = MONITOREO_POR_USUARIO[usuario.id]
         for carpeta in carpetas:
-            event_handler = MyHandler(usuario)  # Debes definir tu propia clase MyHandler
-            observer = Observer()
-            observer.schedule(event_handler, carpeta, recursive=True)
-            observer.start()
-            observadores.append(observer)
+            if carpeta not in observadores_activos:  # Verificar si la carpeta ya está siendo monitoreada
+                event_handler = MyHandler(usuario)  # Debes definir tu propia clase MyHandler
+                observer = Observer()
+                observer.schedule(event_handler, carpeta, recursive=True)
+                observer.start()
+                observadores_activos.add(carpeta)  # Agregar la carpeta al conjunto de carpetas monitoreadas
+                print(f'Monitorización iniciada para: {usuario.username}')
+                print(f'Carpetas a monitorear: {carpeta}')
+            else:
+                print(f'La carpeta {carpeta} ya está siendo monitoreada por {usuario.username}')
 
-            print(f'Monitoreo iniciado para: {usuario.username}')
-            print(f'Carpetas a monitorear {carpeta}')
-
-        MONITOREO_POR_USUARIO[usuario.id].extend(observadores)
+        MONITOREO_POR_USUARIO[usuario.id] = observadores_activos  # Actualizar el conjunto de carpetas monitoreadas
 
 def detener_monitoreo_usuario(usuario):
     global MONITOREO_POR_USUARIO

@@ -88,6 +88,14 @@ DATABASES = {
         'PASSWORD': 'Teraf2022.',
         'HOST': 'porticos.chger7ymel2m.sa-east-1.rds.amazonaws.com',
         'PORT': '3306',
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            'charset': 'utf8mb4',
+            'use_unicode': True,
+            'isolation_level': 'repeatable read',  # Adjust isolation level as needed
+        },
+        'CONN_MAX_AGE': 300,  # Adjust connection age as needed
+        'ATOMIC_REQUESTS': True,
     }
 }
 

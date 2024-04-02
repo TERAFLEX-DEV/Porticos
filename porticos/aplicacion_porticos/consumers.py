@@ -25,11 +25,14 @@ class PorticosConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data):
         pass
 
-    async def enviar_notificacion(self, data, image):
+    async def enviar_notificacion(self, data, ubicacion, total_patentes, total_infracciones, image ):
         print(f'Websocket envio notificacion')
         message = {
             'type': 'registro_nuevo',
             'data':data,
+            'ubicacion':ubicacion,
+            'total_patentes':total_patentes,
+            'total_infracciones':total_infracciones,
             'image':image,
         }
         await self.send(text_data=json.dumps(message))

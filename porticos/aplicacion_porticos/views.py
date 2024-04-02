@@ -6,10 +6,11 @@ from django.views.decorators.csrf import csrf_exempt
 from django.middleware.csrf import get_token
 import json
 from aplicacion_porticos import monitor_ftp
-from aplicacion_porticos.models import CarpetaUsuario
+from aplicacion_porticos.models import Carpeta, CarpetaUsuario, Registro
 from django.contrib.auth.decorators import login_required
 
 from aplicacion_porticos.consumers import PorticosConsumer
+import asyncio
 
 
 # Create your views here.
@@ -54,7 +55,7 @@ def logout_user(request):
     usuario = request.user
     
     # Detener el monitoreo si está en curso para este usuario
-    monitor_ftp.detener_monitoreo_usuario(usuario)
+    #monitor_ftp.detener_monitoreo_usuario(usuario)
 
     logout(request)
     return JsonResponse({'message':'Success'})
@@ -74,3 +75,48 @@ def monitoreo_principal(request):
     monitor_ftp.iniciar_monitoreo_usuario(usuario, paths)
     return JsonResponse({'data':r})
 
+@csrf_exempt
+def porticos_monitoreo(request):
+    usuario = request.user
+    carpetas_usuario = CarpetaUsuario.objects.filter(usuario=usuario)
+
+    datos_camara = []
+    for carpeta_usuario in carpetas_usuario:
+        nombre_camara = carpeta_usuario.carpeta.nombre
+
+        nombre_camara = nombre_camara.split('/')[-2]  # Obtener el último texto después de "/"
+
+        ubicacion_camara = carpeta_usuario.carpeta.ubicacion
+        datos_camara.append({'camara': nombre_camara, 'ubicacion': ubicacion_camara})
+
+    return JsonResponse({'camaras': datos_camara})
+
+@csrf_exempt
+def historial_patentes(request):
+    usuario = request.user
+    patente = request.GET.get('patente')
+    filtro = request.GET.get('filtro')
+    print(f'Patente: {patente} - Filtro: {filtro}')
+
+    if not filtro:
+        print(f'Patente: {patente}')
+        # Realizar la consulta a la base de datos
+        registros = Registro.objects.filter(patente__icontains=patente, usuario=request.user).values('id', 'patente', 'fecha_hora', 'infraccion__descripcion')
+
+    if filtro:
+        print(f'Patente: {patente} - Filtro: {filtro}')
+        # Realizar la consulta a la base de datos
+        registros = Registro.objects.filter(patente__icontains=patente, usuario=request.user, infraccion=filtro).values('id', 'patente', 'fecha_hora', 'infraccion__descripcion')
+
+    # Devolver los registros encontrados en la respuesta JSON
+    return JsonResponse({'registros': list(registros)})
+
+@csrf_exempt
+def ver_imagen(request):
+    patente = request.GET.get('patente')
+
+    if patente:
+        registro = Registro.objects.filter(patente=patente).values('imagen_binaria')
+
+    return JsonResponse({'image':registro})
+        
