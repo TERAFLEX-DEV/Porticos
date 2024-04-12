@@ -95,7 +95,6 @@ DATABASES = {
             'isolation_level': 'repeatable read',  # Adjust isolation level as needed
         },
         'CONN_MAX_AGE': 300,  # Adjust connection age as needed
-        'ATOMIC_REQUESTS': True,
     }
 }
 

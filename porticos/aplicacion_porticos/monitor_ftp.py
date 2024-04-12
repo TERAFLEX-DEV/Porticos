@@ -40,7 +40,8 @@ class MyHandler(FileSystemEventHandler):
                 image = self.descargar_imagen(carpeta, archivo) 
 
                 print(f'Verificamos infracciones en patente')
-                infraccion = self.obtener_infraccion(patente)                
+                infraccion = self.obtener_infraccion(patente)   
+                print(f'Infraccion: {infraccion}')             
 
                 print(f'---Creamos el modelo de Registro---')
                 registro = self.creacion_modelo(patente, carpeta, image, infraccion, fecha_hora_str, archivo)
@@ -62,8 +63,14 @@ class MyHandler(FileSystemEventHandler):
                 total_infracciones = self.total_infracciones_leidas()
                 print(f'Total infracciones: {total_infracciones}')
 
+                if infraccion.id == 1 :
+                    a = 1
+                else:
+                    a = 2
+                
+
                 print(f'Enviamos notificación')
-                asyncio.run(self.enviar_notificacion(patente, ubicacion, total_patente, total_infracciones, image))
+                asyncio.run(self.enviar_notificacion(patente, ubicacion, a, total_patente, total_infracciones, image))
 
     def total_infracciones_leidas(self):
         fecha_hoy = timezone.localtime(timezone.now())
@@ -79,7 +86,7 @@ class MyHandler(FileSystemEventHandler):
         inicio_dia = datetime.combine(fecha_hoy, datetime.min.time())
         fin_dia = datetime.combine(fecha_hoy, datetime.max.time())
 
-        total_leidas = Registro.objects.filter(fecha_hora__range=(inicio_dia, fin_dia)).count()
+        total_leidas = Registro.objects.filter(fecha_hora__range=(inicio_dia, fin_dia), usuario=self.usuario).count()
 
         return total_leidas
                 
@@ -159,10 +166,10 @@ class MyHandler(FileSystemEventHandler):
 
         return archivo, carpeta, patente, fecha_hora_str, ruta
 
-    async def enviar_notificacion(self, data, ubicacion, total_patentes, total_infracciones, image ):
+    async def enviar_notificacion(self, data, ubicacion, a, total_patentes, total_infracciones, image ):
         chat_consumer = self.obtener_chat_consumer(self.usuario.id)
         if chat_consumer:
-            await chat_consumer.enviar_notificacion(data, ubicacion, total_patentes, total_infracciones, image 
+            await chat_consumer.enviar_notificacion(data, ubicacion, a, total_patentes, total_infracciones, image 
             )
         #     print("Mensaje enviado desde ftp_monitor")
         # else:
@@ -194,30 +201,34 @@ def iniciar_monitoreo_usuario(usuario, carpetas):
     global MONITOREO_POR_USUARIO
     
     with MONITOREO_LOCK:
-        if usuario.id not in MONITOREO_POR_USUARIO:
-            MONITOREO_POR_USUARIO[usuario.id] = set()  # Utilizar un conjunto para almacenar las carpetas monitoreadas
-
-        observadores_activos = MONITOREO_POR_USUARIO[usuario.id]
-        for carpeta in carpetas:
-            if carpeta not in observadores_activos:  # Verificar si la carpeta ya está siendo monitoreada
-                event_handler = MyHandler(usuario)  # Debes definir tu propia clase MyHandler
-                observer = Observer()
-                observer.schedule(event_handler, carpeta, recursive=True)
-                observer.start()
-                observadores_activos.add(carpeta)  # Agregar la carpeta al conjunto de carpetas monitoreadas
-                print(f'Monitorización iniciada para: {usuario.username}')
-                print(f'Carpetas a monitorear: {carpeta}')
+        if isinstance(MONITOREO_POR_USUARIO, dict):
+            if usuario.id not in MONITOREO_POR_USUARIO:
+                MONITOREO_POR_USUARIO[usuario.id] = set()  
+            observadores_activos = MONITOREO_POR_USUARIO[usuario.id]
+            if not observadores_activos:  # Verificar si no hay sesiones activas para este usuario
+                for carpeta in carpetas:
+                    event_handler = MyHandler(usuario)  
+                    observer = Observer()
+                    observer.schedule(event_handler, carpeta, recursive=True)
+                    observer.start()
+                    observadores_activos.add(observer)  
+                    print(f'Monitorización iniciada para: {usuario.username}')
+                    print(f'Carpetas a monitorear: {carpeta}')
+                MONITOREO_POR_USUARIO[usuario.id] = observadores_activos
             else:
-                print(f'La carpeta {carpeta} ya está siendo monitoreada por {usuario.username}')
-
-        MONITOREO_POR_USUARIO[usuario.id] = observadores_activos  # Actualizar el conjunto de carpetas monitoreadas
+                print(f'El usuario {usuario.username} ya tiene una sesión activa.')
 
 def detener_monitoreo_usuario(usuario):
     global MONITOREO_POR_USUARIO
-    
     with MONITOREO_LOCK:
-        observadores = MONITOREO_POR_USUARIO.pop(usuario.id, [])
-        for observer in observadores:
-            observer.stop()
-            observer.join()
-    
+        if isinstance(MONITOREO_POR_USUARIO, dict):
+            if usuario.id in MONITOREO_POR_USUARIO:  # Verificar si la clave del usuario existe
+                observadores = MONITOREO_POR_USUARIO.pop(usuario.id, set())  
+                for observer in observadores:
+                    observer.stop()  
+                    observer.join()
+            else:
+                print(f'El usuario con ID {usuario.id} no está presente en el diccionario MONITOREO_POR_USUARIO.')
+
+
+

@@ -11,6 +11,8 @@ class Ciudad(models.Model):
 class ListaNegra(models.Model):
     patente = models.TextField(max_length=6)
     motivo = models.TextField(max_length=255)
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE)
+    ciudad = models.TextField(max_length=255)
 
     def __str__(self):
         return self.patente
@@ -18,9 +20,6 @@ class ListaNegra(models.Model):
 class Infraccion(models.Model):
     nombre = models.TextField(max_length=255)
     descripcion = models.TextField(max_length=255)
-
-    def __str__(self):
-        return self.nombre
 
 class Carpeta(models.Model):
     nombre = models.TextField(max_length=255)
@@ -41,7 +40,8 @@ class Alerta(models.Model):
     ciudad_envia = models.ForeignKey(Ciudad, related_name='alertas_enviadas', on_delete=models.CASCADE)
     ciudad_recibe = models.ForeignKey(Ciudad, related_name='alertas_recibidas', on_delete=models.CASCADE)
     fecha= models.DateTimeField()
-    estado = models.IntegerField() #Estado 1= Visto --- Estado 2 = No visto
+    patente = models.TextField()
+    comentario = models.TextField()
 
     def __str__(self):
         return self.estado
@@ -57,4 +57,13 @@ class Registro(models.Model):
 
     def __str__(self):
         return self.patente
+    
+
+class CiudadVecina(models.Model):
+    origen = models.ForeignKey(Ciudad, on_delete=models.CASCADE, related_name='origen')
+    destino = models.ForeignKey(Ciudad, on_delete=models.CASCADE, related_name='destino')
+
+
+    def __str__(self):
+        return self.origen
 

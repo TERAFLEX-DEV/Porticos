@@ -25,12 +25,13 @@ class PorticosConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data):
         pass
 
-    async def enviar_notificacion(self, data, ubicacion, total_patentes, total_infracciones, image ):
+    async def enviar_notificacion(self, data, ubicacion, a, total_patentes, total_infracciones, image ):
         print(f'Websocket envio notificacion')
         message = {
             'type': 'registro_nuevo',
             'data':data,
             'ubicacion':ubicacion,
+            'infraccion':a, #Si es 1 no hay infraccion, si es 2, mostrar pop up
             'total_patentes':total_patentes,
             'total_infracciones':total_infracciones,
             'image':image,
@@ -41,3 +42,18 @@ class PorticosConsumer(AsyncWebsocketConsumer):
     async def enviar_notificacion_desde_handler(self, message):
         # Este método permite recibir una notificación desde MyHandler
         await self.enviar_notificacion(message)
+
+    @classmethod
+    async def enviar_notificacion_global(cls, origen, destino, patente):
+        message = {
+            'type': 'notificacion',
+            'origen': origen,
+            'destino': destino,
+            'patente': patente
+        }
+        await cls.broadcast_message(json.dumps(message))
+
+    @classmethod
+    async def broadcast_message(cls, message):
+        for instance in cls.instances:
+            await instance.send(text_data=message)
