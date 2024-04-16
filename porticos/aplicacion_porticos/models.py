@@ -42,6 +42,8 @@ class Alerta(models.Model):
     fecha= models.DateTimeField()
     patente = models.TextField()
     comentario = models.TextField()
+    visto = models.IntegerField() #1 es visto - 2 es no visto
+    imagen_binaria = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return self.estado

@@ -44,9 +44,10 @@ class PorticosConsumer(AsyncWebsocketConsumer):
         await self.enviar_notificacion(message)
 
     @classmethod
-    async def enviar_notificacion_global(cls, origen, destino, patente):
+    async def enviar_notificacion_global(cls, id_alerta, origen, destino, patente):
         message = {
             'type': 'notificacion',
+            'id_alerta': id_alerta,
             'origen': origen,
             'destino': destino,
             'patente': patente

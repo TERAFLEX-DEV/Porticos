@@ -1,3 +1,4 @@
+import os
 from django.contrib.auth import authenticate, login, logout
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -147,19 +148,23 @@ def ver_imagen(request):
 
     # Obtener el contenido binario de la imagen almacenado como base64
     imagen_base64 = registro.imagen_binaria
-    imagen_binaria = b64decode(imagen_base64)
 
-    # Crear una instancia de Image desde los datos binarios
-    image = Image.open(BytesIO(imagen_binaria))
+    if imagen_base64:
+        imagen_binaria = b64decode(imagen_base64)
 
-    # Crear una respuesta HTTP con el contenido binario
-    response = HttpResponse(content_type="image/jpeg")
+        # Crear una instancia de Image desde los datos binarios
+        image = Image.open(BytesIO(imagen_binaria))
 
-    # Guardar la imagen en la respuesta
-    image.save(response, format="JPEG")
+        # Crear una respuesta HTTP con el contenido binario
+        response = HttpResponse(content_type="image/jpeg")
 
-    return response
+        # Guardar la imagen en la respuesta
+        image.save(response, format="JPEG")
 
+        return response
+    else:
+        return JsonResponse({'data':False})
+    
 @csrf_exempt
 def comentario_infraccion(request):
 
@@ -369,9 +374,11 @@ def insertar_comentario(request):
                 for nombre_ciudad in ciudades:
                     # Buscar la ciudad por su nombre
                     ciudad = Ciudad.objects.filter(nombre=nombre_ciudad).first()
-                    patente_query = Registro.objects.filter(id=id).values('patente')
+                    patente_query = Registro.objects.filter(id=id).values('patente', 'imagen_binaria')
                     patente = patente_query.first()['patente'] if patente_query.exists() else None
                     print(f'Patente: {patente}')
+
+                    imagen = patente_query.first()['imagen_binaria'] if patente_query.exists() else None
                     
                     print(f'Ciudad destino: {ciudad.nombre} - {ciudad.id}')
 
@@ -381,11 +388,15 @@ def insertar_comentario(request):
                         ciudad_recibe=ciudad,  # Asigna la ciudad de destino a la alerta
                         fecha=timezone.now(),  # Asigna la fecha actual
                         patente=patente,  # Asigna la patente si es relevante
-                        comentario=comentario  # Asigna el comentario
+                        comentario=comentario,  # Asigna el comentario
+                        visto = 2,
+                        imagen_binaria = imagen
                     )
 
+                    id_alerta = alerta.id
+
                     # await PorticosConsumer.enviar_notificacion_global(ciudad_origen, patente)
-                    noti(ciudad_origen, ciudad, patente)
+                    noti(id_alerta, ciudad_origen, ciudad, patente)
 
                     print(f'Alerta creada para {ciudad.nombre}')
                         
@@ -399,7 +410,7 @@ def insertar_comentario(request):
 from django.core.serializers import serialize
 
 
-def noti(origen, destino, patente):
+def noti(id_alerta, origen, destino, patente):
     print(f'Ciudad origen: {origen}, ciudad de destino: {destino} y patente: {patente}')
     # Llamar a la función asíncrona usando un evento de bucle de eventos asyncio
     import asyncio
@@ -414,7 +425,7 @@ def noti(origen, destino, patente):
     # }
 
     # Llamar a la función asíncrona usando un evento de bucle de eventos asyncio
-    asyncio.run(PorticosConsumer.enviar_notificacion_global(origen.nombre, destino.nombre, patente))
+    asyncio.run(PorticosConsumer.enviar_notificacion_global(id_alerta, origen.nombre, destino.nombre, patente))
 
 @csrf_exempt
 def grupo_usuario(request):
@@ -429,3 +440,99 @@ def grupo_usuario(request):
     print(f'Ciudad origen: {ciudad.nombre}')
 
     return JsonResponse ({'ciudad':ciudad.nombre})
+
+@csrf_exempt
+def visto_alerta(request):
+    print(f'Usuario vio alerta')
+    id_alerta = request.GET.get('id')
+
+    if id_alerta:
+        try:
+            alerta = Alerta.objects.get(id=id_alerta)
+            alerta.visto = 1
+            alerta.save()
+            return JsonResponse({'data': 'success'})
+        except Alerta.DoesNotExist:
+            return JsonResponse({'error': 'La alerta no existe'}, status=404)
+    else:
+        return JsonResponse({'error': 'Se requiere un ID de alerta'}, status=400)
+    
+@csrf_exempt
+def alerta_ciudad_noti(request):
+    usuario = request.user
+    grupos_usuario = usuario.groups.all()
+    ciudad = None
+
+    if grupos_usuario.exists():
+        # Si el usuario pertenece a algún grupo, obtén la primera ciudad del primer grupo
+        ciudad = grupos_usuario.first().name
+        print(f'Grupo: {ciudad}')
+
+    if ciudad:
+        # Busca el ID de la ciudad en la base de datos
+        ubi = Ciudad.objects.filter(nombre=ciudad).values('id').first()
+        if ubi:
+            id_ciudad = ubi['id']
+            print(f'Id ciudad: {id_ciudad}')
+            # Obtener las alertas relacionadas con la ciudad encontrada
+            alertas = Alerta.objects.filter(ciudad_recibe=id_ciudad).order_by('-fecha')[:3]
+            # Convertir el resultado en una lista para poder serializarlo a JSON
+            alertas_serializables = list(alertas.values('id', 'ciudad_envia__nombre', 'ciudad_recibe__nombre', 'fecha', 'patente', 'comentario'))
+
+            return JsonResponse({'alertas': alertas_serializables})
+        else:
+            return JsonResponse({'error': 'La ciudad no fue encontrada'})
+    else:
+        return JsonResponse({'error': 'El usuario no pertenece a ningún grupo'})
+    
+@csrf_exempt
+def ver_imagen_alerta(request):
+    id_alerta = request.GET.get('id')
+    print(f'Id registro: {id_alerta}')
+
+    # Recuperar el registro específico desde la base de datos
+    alerta = Alerta.objects.get(id=id_alerta)
+
+    # Obtener el contenido binario de la imagen almacenado como base64
+    imagen_base64 = alerta.imagen_binaria
+
+    if imagen_base64:
+        imagen_binaria = b64decode(imagen_base64)
+
+        # Crear una instancia de Image desde los datos binarios
+        image = Image.open(BytesIO(imagen_binaria))
+
+        # Crear una respuesta HTTP con el contenido binario
+        response = HttpResponse(content_type="image/jpeg")
+
+        # Guardar la imagen en la respuesta
+        image.save(response, format="JPEG")
+
+        return response
+    else:
+        return JsonResponse({'data':False})
+
+from datetime import datetime
+
+@csrf_exempt
+def detalles_patentes(request):
+    usuario = request.user
+    arreglo_respuesta = []  # Arreglo para almacenar los datos de cada carpeta y la cantidad de registros
+    carpetas_usuario = CarpetaUsuario.objects.filter(usuario=usuario).values('id', 'carpeta__nombre')
+    
+    for carpeta_usuario in carpetas_usuario:
+        carpeta_nombre = carpeta_usuario["carpeta__nombre"]
+        ultimo_segmento = os.path.basename(carpeta_nombre.rstrip('/'))  # Obtener el último segmento del nombre de la carpeta
+
+        fecha_hoy = timezone.localtime(timezone.now())
+        inicio_dia = datetime.combine(fecha_hoy, datetime.min.time())
+        fin_dia = datetime.combine(fecha_hoy, datetime.max.time())
+
+        # Filtrar los registros asociados a la carpeta que se hayan creado hoy
+        registros = Registro.objects.filter(carpeta_id=carpeta_usuario['id'], fecha_hora__range=(inicio_dia, fin_dia))
+        cantidad_registros = registros.count()
+
+        # Agregar los datos de la carpeta y la cantidad de registros al arreglo de respuesta
+        arreglo_respuesta.append({'carpeta': ultimo_segmento, 'cantidad_registros': cantidad_registros})
+
+    return JsonResponse({'respuesta': arreglo_respuesta})

@@ -38,4 +38,9 @@ urlpatterns = [
     path('ciudades_vecinas/', views.ciudades_vecinas),
     path('ingresar_comentario/', views.insertar_comentario),
     path('grupo_usuario/', views.grupo_usuario),
+    path('visto_alerta', views.visto_alerta),
+    path('alerta_ciudades_noti/', views.alerta_ciudad_noti),
+    path('ver_imagen_alerta', views.ver_imagen_alerta),
+    path('detalles_patentes/', views.detalles_patentes),
+
 ]

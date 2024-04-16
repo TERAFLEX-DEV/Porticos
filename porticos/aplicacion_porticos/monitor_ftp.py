@@ -3,6 +3,8 @@ import base64
 from datetime import datetime
 import io
 import base64
+import os
+import shutil
 import time
 import cv2
 from django.utils import timezone
@@ -99,6 +101,7 @@ class MyHandler(FileSystemEventHandler):
             "carpeta": carpeta_usuario,
             "imagen_binaria": image,
             "infraccion": infraccion,
+            "observacion":"",
         }
 
         # Validar si la fecha y hora es válida antes de agregarla al registro
