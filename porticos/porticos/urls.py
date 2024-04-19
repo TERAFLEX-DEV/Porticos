@@ -42,5 +42,6 @@ urlpatterns = [
     path('alerta_ciudades_noti/', views.alerta_ciudad_noti),
     path('ver_imagen_alerta', views.ver_imagen_alerta),
     path('detalles_patentes/', views.detalles_patentes),
+    path('ver_imagen_infraccion', views.ver_imagen_infraccion),
 
 ]

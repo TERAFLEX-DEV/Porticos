@@ -109,34 +109,29 @@ def historial_patentes(request):
     usuario = request.user
     patente = request.GET.get('patente')
     filtro = request.GET.get('filtro')
-    print(f'Vacio')
 
     registros = Registro.objects.filter(usuario=usuario).values('id', 'patente', 'fecha_hora', 'infraccion_id', 'infraccion__descripcion').order_by('-fecha_hora')
-    print(f'Respondido...')
 
     if patente:
-        print(f'Patente: {patente} responde')
-        # Aplicar filtro por patente si se proporciona
-        registros = registros.filter(patente__icontains=patente).values('id', 'patente', 'fecha_hora', 'infraccion_id', 'infraccion__descripcion').order_by('-fecha_hora')
-        
+        registros = registros.filter(patente__icontains=patente)
+
     elif filtro == '1':
-        print(f'Patente: {patente} - Filtro: {filtro} responde filtro 1')
-        # Aplicar filtro adicional si se proporciona
-        registros = registros.filter(usuario=usuario).values('id', 'patente', 'fecha_hora', 'infraccion_id', 'infraccion__descripcion').order_by('-fecha_hora')
+        registros = registros.filter(usuario=usuario)
 
     elif filtro:
-        print(f'Patente: {patente} - Filtro: {filtro} responde')
-        # Aplicar filtro adicional si se proporciona
-        registros = registros.filter(infraccion=filtro).values('id', 'patente', 'fecha_hora', 'infraccion_id', 'infraccion__descripcion').order_by('-fecha_hora')
+        registros = registros.filter(infraccion=filtro)
 
-    # Iterar sobre los registros y ajustar la descripción de la infracción según el tipo
+    registros_serializados = []
     for registro in registros:
-        if registro['infraccion_id'] not in [2, 3, 4]:
-            registro['infraccion__descripcion'] = ''  # Si no es tipo 2, 3 o 4, establecer descripción vacía
-        del registro['infraccion_id']  # Eliminar el campo de descripción de la infracción
+        registro_serializado = {
+            'id': registro['id'],
+            'patente': registro['patente'],
+            'fecha_hora': registro['fecha_hora'].strftime('%d/%m/%Y %H:%M:%S'),  # Formatear la fecha
+            'infraccion_descripcion': registro['infraccion__descripcion']
+        }
+        registros_serializados.append(registro_serializado)
 
-    # Devolver los registros encontrados en la respuesta JSON
-    return JsonResponse({'registros': list(registros)})
+    return JsonResponse({'registros': registros_serializados})
 
 @csrf_exempt
 def ver_imagen(request):
@@ -288,8 +283,18 @@ def alerta_ciudad(request):
             print(f'Id ciudad: {id_ciudad}')
             # Obtener las alertas relacionadas con la ciudad encontrada
             alertas = Alerta.objects.filter(ciudad_recibe=id_ciudad).order_by('-fecha')
-            # Convertir el resultado en una lista para poder serializarlo a JSON
-            alertas_serializables = list(alertas.values('id', 'ciudad_envia__nombre', 'ciudad_recibe__nombre', 'fecha', 'patente', 'comentario'))
+            # Serializar las alertas y formatear la fecha
+            alertas_serializables = []
+            for alerta in alertas:
+                alerta_dict = {
+                    'id': alerta.id,
+                    'ciudad_envia': alerta.ciudad_envia.nombre,
+                    'ciudad_recibe': alerta.ciudad_recibe.nombre,
+                    'fecha': alerta.fecha.strftime('%d/%m/%Y %H:%M:%S'),  # Formatear la fecha
+                    'patente': alerta.patente,
+                    'comentario': alerta.comentario
+                }
+                alertas_serializables.append(alerta_dict)
 
             return JsonResponse({'alertas': alertas_serializables})
         else:
@@ -306,13 +311,14 @@ def notificacion_infraccion(request):
         infraccion_id__in=[2, 3, 4],
         observacion__in=[None, ''],
         usuario_id=usuario
-    ).values('id', 'patente', 'infraccion__nombre').order_by('-id')
+    ).values('id', 'patente', 'fecha_hora', 'infraccion__nombre').order_by('-id')
 
     # Convertir los resultados en un formato JSON
     registros_json = [
         {
             'id': registro['id'],
             'patente': registro['patente'],
+            'fecha': registro['fecha_hora'].strftime('%d/%m/%Y %H:%M:%S'),
             'nombre_infraccion': registro['infraccion__nombre']
         }
         for registro in registros
@@ -536,3 +542,30 @@ def detalles_patentes(request):
         arreglo_respuesta.append({'carpeta': ultimo_segmento, 'cantidad_registros': cantidad_registros})
 
     return JsonResponse({'respuesta': arreglo_respuesta})
+
+@csrf_exempt
+def ver_imagen_infraccion(request):
+    id_infraccion = request.GET.get('id')
+    print(f'Id registro: {id_infraccion}')
+
+    # Recuperar el registro específico desde la base de datos
+    alerta = Registro.objects.get(id=id_infraccion)
+
+    # Obtener el contenido binario de la imagen almacenado como base64
+    imagen_base64 = alerta.imagen_binaria
+
+    if imagen_base64:
+        imagen_binaria = b64decode(imagen_base64)
+
+        # Crear una instancia de Image desde los datos binarios
+        image = Image.open(BytesIO(imagen_binaria))
+
+        # Crear una respuesta HTTP con el contenido binario
+        response = HttpResponse(content_type="image/jpeg")
+
+        # Guardar la imagen en la respuesta
+        image.save(response, format="JPEG")
+
+        return response
+    else:
+        return JsonResponse({'data':False})

@@ -60,6 +60,9 @@ class Registro(models.Model):
     def __str__(self):
         return self.patente
     
+    def formato_fecha_hora(self):
+        return self.fecha_hora.strftime('%d/%m/%Y %H:%M:%S')
+    
 
 class CiudadVecina(models.Model):
     origen = models.ForeignKey(Ciudad, on_delete=models.CASCADE, related_name='origen')

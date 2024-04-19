@@ -25,11 +25,12 @@ class PorticosConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data):
         pass
 
-    async def enviar_notificacion(self, data, ubicacion, a, total_patentes, total_infracciones, image ):
+    async def enviar_notificacion(self, data, carpeta, ubicacion, a, total_patentes, total_infracciones, image ):
         print(f'Websocket envio notificacion')
         message = {
             'type': 'registro_nuevo',
             'data':data,
+            'carpeta':carpeta,
             'ubicacion':ubicacion,
             'infraccion':a, #Si es 1 no hay infraccion, si es 2, mostrar pop up
             'total_patentes':total_patentes,

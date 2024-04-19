@@ -36,7 +36,7 @@ class MyHandler(FileSystemEventHandler):
                 print("Archivo ignorado. No se procesará.")
             else:
 
-                time.sleep(0.5)
+                time.sleep(1)
 
                 print(f'Descargamos imagen')
                 image = self.descargar_imagen(carpeta, archivo) 
@@ -72,14 +72,14 @@ class MyHandler(FileSystemEventHandler):
                 
 
                 print(f'Enviamos notificación')
-                asyncio.run(self.enviar_notificacion(patente, ubicacion, a, total_patente, total_infracciones, image))
+                asyncio.run(self.enviar_notificacion(patente, carpeta, ubicacion, a, total_patente, total_infracciones, image))
 
     def total_infracciones_leidas(self):
         fecha_hoy = timezone.localtime(timezone.now())
         inicio_dia = datetime.combine(fecha_hoy, datetime.min.time())
         fin_dia = datetime.combine(fecha_hoy, datetime.max.time())
 
-        total_infracciones = Registro.objects.filter(fecha_hora__range=(inicio_dia, fin_dia), infraccion__in=[2, 3, 4]).count()
+        total_infracciones = Registro.objects.filter(fecha_hora__range=(inicio_dia, fin_dia), infraccion__in=[2, 3, 4], usuario=self.usuario).count()
 
         return total_infracciones
 
@@ -169,10 +169,10 @@ class MyHandler(FileSystemEventHandler):
 
         return archivo, carpeta, patente, fecha_hora_str, ruta
 
-    async def enviar_notificacion(self, data, ubicacion, a, total_patentes, total_infracciones, image ):
+    async def enviar_notificacion(self, data, carpeta, ubicacion, a, total_patentes, total_infracciones, image ):
         chat_consumer = self.obtener_chat_consumer(self.usuario.id)
         if chat_consumer:
-            await chat_consumer.enviar_notificacion(data, ubicacion, a, total_patentes, total_infracciones, image 
+            await chat_consumer.enviar_notificacion(data, carpeta, ubicacion, a, total_patentes, total_infracciones, image 
             )
         #     print("Mensaje enviado desde ftp_monitor")
         # else:
