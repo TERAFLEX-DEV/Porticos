@@ -170,11 +170,35 @@ APPEND_SLASH = False
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = True
 
-SESSION_COOKIE_SAMESITE = 'None'
-SESSION_COOKIE_SECURE = False
-
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = False
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = True
+
+# Duración de la sesión en segundos (por defecto: 1209600 segundos = 2 semanas)
+SESSION_COOKIE_AGE = 3600  # Duración de la sesión en segundos (1 hora)
+
+# Nombre de la cookie de sesión (por defecto: 'sessionid')
+SESSION_COOKIE_NAME = 'misesion'
+
+# Dominio al que la cookie de sesión se aplicará (por defecto: None)
+# SESSION_COOKIE_DOMAIN = '.example.com'  # Esto permitiría que la cookie sea enviada a todos los subdominios de example.com
+
+# Camino en el servidor al que la cookie de sesión será válida (por defecto: '/')
+SESSION_COOKIE_PATH = '/'
+
+# Marca la cookie de sesión como segura (por defecto: False)
+SESSION_COOKIE_SECURE = True
+
+# Configura la marca HttpOnly para la cookie de sesión (por defecto: True)
+SESSION_COOKIE_HTTPONLY = False
+
+# Configura la marca SameSite para la cookie de sesión (por defecto: 'Lax')
+SESSION_COOKIE_SAMESITE = 'None'  # Opciones: 'Strict', 'Lax', 'None'
+
+# Configura el dominio en el que la cookie de sesión es válida (por defecto: None)
+# SESSION_COOKIE_DOMAIN = 'example.com'
+
+# Configura la política de expiración de la cookie de sesión (por defecto: 'None')
+# SESSION_EXPIRE_AT_BROWSER_CLOSE = False

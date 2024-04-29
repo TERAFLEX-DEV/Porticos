@@ -196,6 +196,11 @@ class MyHandler(FileSystemEventHandler):
 from watchdog.observers import Observer
 from threading import Lock
 
+class ObserverData:
+    def __init__(self, observer, folder):
+        self.observer = observer
+        self.folder = folder
+
 # Define una variable global para controlar si el monitoreo está en curso para cada usuario
 MONITOREO_POR_USUARIO = {}
 MONITOREO_LOCK = Lock()  # Lock para garantizar la consistencia del diccionario MONITOREO_POR_USUARIO
@@ -206,15 +211,15 @@ def iniciar_monitoreo_usuario(usuario, carpetas):
     with MONITOREO_LOCK:
         if isinstance(MONITOREO_POR_USUARIO, dict):
             if usuario.id not in MONITOREO_POR_USUARIO:
-                MONITOREO_POR_USUARIO[usuario.id] = set()  
+                MONITOREO_POR_USUARIO[usuario.id] = []  
             observadores_activos = MONITOREO_POR_USUARIO[usuario.id]
-            if not observadores_activos:  # Verificar si no hay sesiones activas para este usuario
+            if not observadores_activos:  
                 for carpeta in carpetas:
                     event_handler = MyHandler(usuario)  
                     observer = Observer()
                     observer.schedule(event_handler, carpeta, recursive=True)
                     observer.start()
-                    observadores_activos.add(observer)  
+                    observadores_activos.append(ObserverData(observer, carpeta))  
                     print(f'Monitorización iniciada para: {usuario.username}')
                     print(f'Carpetas a monitorear: {carpeta}')
                 MONITOREO_POR_USUARIO[usuario.id] = observadores_activos
@@ -223,15 +228,31 @@ def iniciar_monitoreo_usuario(usuario, carpetas):
 
 def detener_monitoreo_usuario(usuario):
     global MONITOREO_POR_USUARIO
+
     with MONITOREO_LOCK:
         if isinstance(MONITOREO_POR_USUARIO, dict):
-            if usuario.id in MONITOREO_POR_USUARIO:  # Verificar si la clave del usuario existe
-                observadores = MONITOREO_POR_USUARIO.pop(usuario.id, set())  
+            print(f'Hola usuario: {usuario.username}')
+            print(f'Diccionario MONITOREO_POR_USUARIO:')
+            for user_id, observadores in MONITOREO_POR_USUARIO.items():
+                print(f'Usuario ID: {user_id}')
                 for observer in observadores:
-                    observer.stop()  
-                    observer.join()
-            else:
-                print(f'El usuario con ID {usuario.id} no está presente en el diccionario MONITOREO_POR_USUARIO.')
+                    print(f'  Observer: {observer.folder}')
 
+            if usuario.id in MONITOREO_POR_USUARIO:
+                print(f'Hola')
+                carpetas_activas = MONITOREO_POR_USUARIO[usuario.id]
+                
+                if not carpetas_activas:
+                    print(f'El usuario con ID {usuario.id} no tiene sesiones activas.')
+                else:
+                    print(f'Carpetas activas para el usuario')
 
-
+                    for observer_data in carpetas_activas:
+                        print(f'Usuario ID: {usuario.id}')
+                        print(f'  Carpeta: {observer_data.folder}')
+                        print(f'  Observer: {observer_data.observer}')
+                        # Detener y limpiar el observador
+                        observer_data.observer.stop()
+                        observer_data.observer.join()
+                    # Limpiar la lista de observadores
+                    MONITOREO_POR_USUARIO.pop(usuario.id)

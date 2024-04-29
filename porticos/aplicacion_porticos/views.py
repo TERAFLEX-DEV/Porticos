@@ -1,18 +1,17 @@
-import os
 from django.contrib.auth import authenticate, login, logout
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.middleware.csrf import get_token
 import json
 from aplicacion_porticos import monitor_ftp
-from aplicacion_porticos.models import Alerta, CarpetaUsuario, Ciudad, CiudadVecina, Registro, ListaNegra
+from aplicacion_porticos.models import Alerta, Carpeta, CarpetaUsuario, Ciudad, CiudadVecina, Registro, ListaNegra
 from base64 import b64decode
 from io import BytesIO
 import threading
 from PIL import Image
 from django.utils import timezone
-
-
+from django.contrib.auth.models import User, Group
+from django.shortcuts import redirect
 
 # Create your views here.
 @csrf_exempt
@@ -30,6 +29,7 @@ def login_user(request):
     response["Access-Control-Allow-Headers"] = "Content-Type"  # Permitir solo el encabezado Content-Type
 
     r = False
+    isAdmin = False
     
     if request.method == 'POST':
         # Obtener el cuerpo de la solicitud como un diccionario
@@ -44,23 +44,18 @@ def login_user(request):
         if user is not None:
             login(request, user)
 
+            isAdmin = user.is_superuser
+
             r=True
 
-            return JsonResponse(data={'r':r, 'user':user.username})
+            return JsonResponse(data={'r':r, 'user':user.username, 'admin':isAdmin})
         else:
-            return JsonResponse(data={'r':r, 'user':username})
+            return JsonResponse(data={'r':r, 'user':username, 'admin':isAdmin})
 
 @csrf_exempt
 def logout_user(request):
 
     usuario = request.user
-
-    print(f'Solicitud detener monitoreo---')
-    
-    # Detener el monitoreo si está en curso para este usuario
-    monitor_ftp.detener_monitoreo_usuario(usuario)
-
-    print(f'Monitoreo detenido---')
 
     logout(request)
     return JsonResponse({'message':'Success'})
@@ -69,7 +64,7 @@ def logout_user(request):
 threads_activos = []
 
 @csrf_exempt
-def monitoreo_principal(request):
+def monitoreo_principal(request):    
     usuario = request.user  # Obtener el ID del usuario autenticado
     r = True
 
@@ -247,16 +242,22 @@ def agregar_lista_negra(request):
 @csrf_exempt
 def eliminar_lista_negra(request):
     id_dato = request.GET.get('id')
+    usuario = request.user
     print(f'Registro a buscar: {id_dato}')
 
     if request.method == 'DELETE':
         try:
             # Obtener el objeto ListaNegra por su ID
             registro = ListaNegra.objects.get(id=id_dato)
-            # Eliminar el registro
-            registro.delete()
-            # print(f'Patente eliminada')
-            return JsonResponse({'success': True, 'message': 'Registro eliminado correctamente'})
+
+            # Verificar si el usuario que intenta eliminar es el mismo que lo creó
+            if registro.usuario == usuario:
+                # Eliminar el registro
+                registro.delete()
+                return JsonResponse({'success': True, 'message': 'Registro eliminado correctamente'})
+            else:
+                return JsonResponse({'success': False, 'message': 'No tiene permiso para eliminar este registro'})
+
         except ListaNegra.DoesNotExist:
             return JsonResponse({'success': False, 'message': 'El registro no existe'})
         except Exception as e:
@@ -413,7 +414,6 @@ def insertar_comentario(request):
     
     return None
 
-from django.core.serializers import serialize
 
 
 def noti(id_alerta, origen, destino, patente):
@@ -439,13 +439,22 @@ def grupo_usuario(request):
 
     usuario = request.user
 
+    ciudad_nombre = None  # Inicializar ciudad_nombre como None
+
     if usuario.groups.exists():
         grupo_ciudad = usuario.groups.first()
         ciudad_nombre = grupo_ciudad.name
-        ciudad = Ciudad.objects.filter(nombre=ciudad_nombre).first()
-    print(f'Ciudad origen: {ciudad.nombre}')
 
-    return JsonResponse ({'ciudad':ciudad.nombre})
+    if ciudad_nombre is not None:
+        ciudad = Ciudad.objects.filter(nombre=ciudad_nombre).first()
+        if ciudad is not None:
+            print(f'Ciudad origen: {ciudad.nombre}')
+        else:
+            print('No se encontró la ciudad asociada al grupo del usuario')
+    else:
+        print('El usuario no tiene grupos asignados')
+
+    return JsonResponse({'ciudad': ciudad_nombre})
 
 @csrf_exempt
 def visto_alerta(request):
@@ -519,27 +528,33 @@ def ver_imagen_alerta(request):
         return JsonResponse({'data':False})
 
 from datetime import datetime
+from django.db.models import Count
+from datetime import datetime
+from .models import Carpeta, CarpetaUsuario, Registro
+from django.db.models import Q
 
 @csrf_exempt
 def detalles_patentes(request):
-    usuario = request.user
-    arreglo_respuesta = []  # Arreglo para almacenar los datos de cada carpeta y la cantidad de registros
-    carpetas_usuario = CarpetaUsuario.objects.filter(usuario=usuario).values('id', 'carpeta__nombre')
+    usuario_id = request.user.id
     
-    for carpeta_usuario in carpetas_usuario:
-        carpeta_nombre = carpeta_usuario["carpeta__nombre"]
-        ultimo_segmento = os.path.basename(carpeta_nombre.rstrip('/'))  # Obtener el último segmento del nombre de la carpeta
+    fecha_hoy = timezone.localtime(timezone.now())
+    inicio_dia = datetime.combine(fecha_hoy, datetime.min.time())
+    fin_dia = datetime.combine(fecha_hoy, datetime.max.time())
 
-        fecha_hoy = timezone.localtime(timezone.now())
-        inicio_dia = datetime.combine(fecha_hoy, datetime.min.time())
-        fin_dia = datetime.combine(fecha_hoy, datetime.max.time())
+    # Consulta para obtener la lista de carpetas y la cantidad de registros para el usuario actual
+    resultado_consulta = (
+        Carpeta.objects
+        .filter(carpetausuario__usuario_id=usuario_id)  # Filtrar las carpetas asociadas al usuario
+        .annotate(cantidad_registros=Count('registro', filter=Q(registro__fecha_hora__range=(inicio_dia, fin_dia))))  # Contar registros asociados a cada carpeta que estén dentro del rango de fechas
+        .values('nombre', 'cantidad_registros')  # Seleccionar los campos deseados
+    )
 
-        # Filtrar los registros asociados a la carpeta que se hayan creado hoy
-        registros = Registro.objects.filter(carpeta_id=carpeta_usuario['id'], fecha_hora__range=(inicio_dia, fin_dia))
-        cantidad_registros = registros.count()
-
-        # Agregar los datos de la carpeta y la cantidad de registros al arreglo de respuesta
-        arreglo_respuesta.append({'carpeta': ultimo_segmento, 'cantidad_registros': cantidad_registros})
+    # Construir la respuesta
+    arreglo_respuesta = []
+    for item in resultado_consulta:
+        carpeta_nombre_completo = item['nombre']
+        carpeta_nombre = carpeta_nombre_completo.split('/')[2]  # Obtener el último segmento del nombre de la carpeta
+        arreglo_respuesta.append({'carpeta': carpeta_nombre, 'cantidad_registros': item['cantidad_registros']})
 
     return JsonResponse({'respuesta': arreglo_respuesta})
 
@@ -569,3 +584,268 @@ def ver_imagen_infraccion(request):
         return response
     else:
         return JsonResponse({'data':False})
+    
+
+##########################################################
+##########################################################
+############### PANEL DE ADMINISTRACIÓN ##################
+##########################################################
+##########################################################
+    
+@csrf_exempt
+def admin_ver_usuarios(request):
+
+    username = request.GET.get('username')
+
+    usuario = User.objects.filter(is_superuser=0, username__icontains=username)
+
+    usuarios= []
+
+    for u in usuario:
+
+        grupos_usuario = u.groups.all()
+        ciudad = None
+
+        if grupos_usuario.exists():
+            ciudad = grupos_usuario.first().name
+
+            u_serializado ={
+                'id':u.id,
+                'username': u.username,
+                'ciudad': ciudad
+            }
+        else:
+            u_serializado ={
+                'id':u.id,
+                'username': u.username,
+            }
+
+        usuarios.append(u_serializado)  
+
+
+    return JsonResponse({'usuarios':usuarios})
+
+from django.shortcuts import get_object_or_404
+
+
+@csrf_exempt
+def logout_usuarios(request):
+    if request.method == 'POST':
+        id_usuario = request.GET.get('id')
+
+        # Obtener el objeto de usuario
+        usuario = get_object_or_404(User, id=id_usuario)
+        
+        print(f'Solicitud de detener monitoreo para el usuario con ID: {id_usuario}')
+        
+        # Detener el monitoreo si está en curso para este usuario
+        monitor_detenido = monitor_ftp.detener_monitoreo_usuario(usuario)
+
+        return JsonResponse({'data': 'success'})
+
+@csrf_exempt
+def eliminar_usuario(request):
+    id_dato = request.GET.get('id')
+    print(f'Usuario a buscar: {id_dato}')
+
+    if request.method == 'DELETE':
+        try:
+            # Obtener el objeto ListaNegra por su ID
+            usuario = User.objects.get(id=id_dato)
+
+            # Verificar si el usuario que intenta eliminar es el mismo que lo creó
+            usuario.delete()
+            return JsonResponse({'success': True, 'message': 'Registro eliminado correctamente'})
+            
+        except User.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'El usuario no existe'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)})
+    else:
+        return JsonResponse({'success': False, 'message': 'Método no permitido'})
+    
+@csrf_exempt
+def admin_crear_usuario(request):
+    if request.method == 'POST':
+        # Obtener el cuerpo de la solicitud como un diccionario
+        body_unicode = request.body.decode('utf-8')
+        body_data = json.loads(body_unicode)
+
+        # Obtener los datos de la solicitud
+        username = body_data.get('username')
+        password = body_data.get('password')
+        grupo = body_data.get('grupo')
+        grupo = grupo.upper()
+
+        # Verificar si el grupo ya existe o crearlo
+        grupo, creado = Group.objects.get_or_create(name=grupo)
+
+        user = User.objects.create_user(username=username, password=password)
+        
+        user.save()
+        grupo.user_set.add(user)
+        
+
+        return JsonResponse({'data':'Usuario creado y agregado al grupo '+grupo.name})
+    
+@csrf_exempt
+def admin_ver_camaras(request):
+
+    camara = request.GET.get('camara')
+
+    carpeta = Carpeta.objects.filter(nombre__icontains=camara).values('id','nombre','ubicacion','ciudad__nombre')
+
+    carpetas= []
+
+    for c in carpeta:
+            
+        nombre_camara = c['nombre'].split('/')[-2]  # Obtener el último texto después de "/"
+
+        c_serializado ={
+            'id':c['id'],
+            'nombre': nombre_camara,
+            'ubicacion': c['ubicacion'],
+            'ciudad':c['ciudad__nombre']
+            }
+
+        carpetas.append(c_serializado)  
+
+
+    return JsonResponse({'carpetas':carpetas})
+
+@csrf_exempt
+def eliminar_camara(request):
+    id_dato = request.GET.get('id')
+    print(f'Camara a buscar: {id_dato}')
+
+    if request.method == 'DELETE':
+        try:
+            # Obtener el objeto ListaNegra por su ID
+            camara = Carpeta.objects.get(id=id_dato)
+
+            # Verificar si el usuario que intenta eliminar es el mismo que lo creó
+            camara.delete()
+            return JsonResponse({'success': True, 'message': 'Camara eliminado correctamente'})
+            
+        except User.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'La camara no existe'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)})
+    else:
+        return JsonResponse({'success': False, 'message': 'Método no permitido'})
+    
+@csrf_exempt
+def admin_ver_ciudades(request):
+
+    ciudad = Ciudad.objects.all()
+
+    ciudades= []
+
+    for c in ciudad:
+
+        c_serializado ={
+            'value': c.nombre.lower(),
+            'label': c.nombre,
+            }
+
+        ciudades.append(c_serializado)  
+
+
+    return JsonResponse({'ciudades':ciudades})
+    
+@csrf_exempt
+def admin_crear_camara(request):
+    if request.method == 'POST':
+        # Obtener el cuerpo de la solicitud como un diccionario
+        body_unicode = request.body.decode('utf-8')
+        body_data = json.loads(body_unicode)
+
+        # Obtener los datos de la solicitud
+        nombre = body_data.get('nombre')
+        ubicacion = body_data.get('ubicacion')
+        ciudad = body_data.get('ciudad')
+
+        nombre = nombre.upper()
+        ubicacion = ubicacion.upper()
+
+        nombre_camara = 'C:/FTP/'+nombre+'/'
+
+        print(f'Camara {nombre_camara}')
+
+        ciudades = Ciudad.objects.get(nombre=ciudad)
+
+        camara = Carpeta.objects.create(nombre=nombre_camara, ubicacion=ubicacion, ciudad=ciudades)
+        
+        camara.save()
+        
+        return JsonResponse({'data':'Carpeta creada '+camara.nombre})
+    
+@csrf_exempt
+def admin_enviar_datos(request):
+    id_dato = request.GET.get('id')
+
+    camaras = []
+
+    if id_dato:
+        camara = Carpeta.objects.filter(id=id_dato).first()  # Usar first() para obtener el primer objeto o None
+
+        if camara:
+            ciudad = camara.ciudad
+
+            nombre_camara = camara.nombre.split('/')[-2]  # Obtener el último texto después de "/"
+
+            c_serializado ={
+                'nombre': nombre_camara,
+                'ubicacion': camara.ubicacion,
+                'ciudad':{
+                    'value': ciudad.nombre.lower(),
+                    'label': ciudad.nombre
+                }
+            }
+
+            camaras.append(c_serializado)
+
+    return JsonResponse({'camaras':camaras})
+
+
+@csrf_exempt
+def admin_editar_camara(request):
+    if request.method == 'POST':
+        body_unicode = request.body.decode('utf-8')
+        body_data = json.loads(body_unicode)
+
+        try:
+            # Obtener los datos de la solicitud
+            id = body_data.get('id')
+
+            camara = Carpeta.objects.get(id=id)
+
+            nombre = body_data.get('nombre')
+            ubicacion = body_data.get('ubicacion')
+            ciudad = body_data.get('ciudad')
+
+            print(f'ID: {id}, Nombre: {nombre}, Ubicacion: {ubicacion}, Ciudad: {ciudad}')
+
+            # Convertir nombre y ubicación a mayúsculas
+            nombre = nombre.upper()
+            ubicacion = ubicacion.upper()
+
+            # Construir la ruta de la carpeta
+            nombre_carpeta = 'C:/FTP/' + nombre + '/'
+
+            # Obtener el objeto Ciudad correspondiente al nombre recibido
+            ciudad_obj = Ciudad.objects.get(nombre=ciudad)
+
+            # Actualizar los atributos de la cámara
+            camara.nombre = nombre_carpeta
+            camara.ubicacion = ubicacion
+            camara.ciudad = ciudad_obj
+
+            # Guardar los cambios en la base de datos
+            camara.save()
+
+            return JsonResponse({'data': 'success'})
+        except Carpeta.DoesNotExist:
+            return JsonResponse({'error': 'La cámara con el ID proporcionado no existe'}, status=404)
+    else:
+        return JsonResponse({'error': 'Esta vista solo acepta solicitudes POST'}, status=405)

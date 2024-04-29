@@ -44,4 +44,19 @@ urlpatterns = [
     path('detalles_patentes/', views.detalles_patentes),
     path('ver_imagen_infraccion', views.ver_imagen_infraccion),
 
+##########################################################
+############### PANEL DE ADMINISTRACIÓN ##################
+##########################################################
+
+    path('admin_ver_usuarios', views.admin_ver_usuarios),
+    path('admin_logout_usuarios', views.logout_usuarios),
+    path('eliminar_usuario', views.eliminar_usuario),
+    path('admin_crear_usuario/', views.admin_crear_usuario),
+    path('admin_ver_camaras', views.admin_ver_camaras),
+    path('eliminar_camaras', views.eliminar_camara),
+    path('admin_crear_camaras/', views.admin_crear_camara),
+    path('admin_ver_ciudades/', views.admin_ver_ciudades),
+    path('admin_enviar_datos', views.admin_enviar_datos),
+    path('admin_editar_camaras/', views.admin_editar_camara),
+
 ]
