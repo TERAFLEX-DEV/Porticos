@@ -13,6 +13,8 @@ from django.utils import timezone
 from django.contrib.auth.models import User, Group
 from django.shortcuts import redirect
 
+from aplicacion_porticos.export import Exportar
+
 # Create your views here.
 @csrf_exempt
 def get_csrf_token(request):
@@ -597,7 +599,10 @@ def admin_ver_usuarios(request):
 
     username = request.GET.get('username')
 
-    usuario = User.objects.filter(is_superuser=0, username__icontains=username)
+    if(username):
+        usuario = User.objects.filter(is_superuser=0, username__icontains=username)
+    else:
+        usuario = User.objects.filter(is_superuser=0)
 
     usuarios= []
 
@@ -736,22 +741,21 @@ def eliminar_camara(request):
     
 @csrf_exempt
 def admin_ver_ciudades(request):
+# Obtener todas las ciudades
+    ciudades = Ciudad.objects.all()
 
-    ciudad = Ciudad.objects.all()
+    # Verificar si hay ciudades disponibles
 
-    ciudades= []
+    ciudades_serializadas = []
 
-    for c in ciudad:
-
-        c_serializado ={
+    for c in ciudades:
+        c_serializado = {
             'value': c.nombre.lower(),
             'label': c.nombre,
-            }
+        }
+        ciudades_serializadas.append(c_serializado)
 
-        ciudades.append(c_serializado)  
-
-
-    return JsonResponse({'ciudades':ciudades})
+    return JsonResponse({'ciudades': ciudades_serializadas})
     
 @csrf_exempt
 def admin_crear_camara(request):
@@ -849,3 +853,303 @@ def admin_editar_camara(request):
             return JsonResponse({'error': 'La cámara con el ID proporcionado no existe'}, status=404)
     else:
         return JsonResponse({'error': 'Esta vista solo acepta solicitudes POST'}, status=405)
+
+@csrf_exempt
+def admin_crear_ciudades(request):
+    if request.method == 'POST':
+        # Obtener el cuerpo de la solicitud como un diccionario
+        body_unicode = request.body.decode('utf-8')
+        body_data = json.loads(body_unicode)
+
+        # Obtener los datos de la solicitud
+        nombre = body_data.get('nombre')
+
+        nombre = nombre.upper()
+
+        ciudad = Ciudad.objects.create(nombre=nombre)
+        
+        ciudad.save()
+        
+        return JsonResponse({'data':'Ciudad creada '+ciudad.nombre})
+    
+@csrf_exempt
+def admin_ver_ciudades_buscador(request):
+
+    ciudad = request.GET.get('ciudad')
+
+    if(ciudad):
+        ciudad = Ciudad.objects.filter(nombre__icontains=ciudad).values('id','nombre')
+    else:
+        ciudad = Ciudad.objects.all().values('id','nombre')
+
+    ciudades= []
+
+    for c in ciudad:
+
+        c_serializado ={
+            'id':c['id'],
+            'nombre': c['nombre'],
+            }
+
+        ciudades.append(c_serializado)  
+
+
+    return JsonResponse({'ciudades':ciudades})
+
+@csrf_exempt
+def admin_enviar_datos_ciudad(request):
+    id_dato = request.GET.get('id')
+
+    ciudades = []
+
+    if id_dato:
+        ciudad = Ciudad.objects.filter(id=id_dato).first()  # Usar first() para obtener el primer objeto o None
+
+        if ciudad:
+
+            c_serializado ={
+                'nombre': ciudad.nombre
+            }
+
+            ciudades.append(c_serializado)
+
+    return JsonResponse({'ciudades':ciudades})
+
+@csrf_exempt
+def admin_editar_ciudad(request):
+    if request.method == 'POST':
+        body_unicode = request.body.decode('utf-8')
+        body_data = json.loads(body_unicode)
+
+        try:
+            # Obtener los datos de la solicitud
+            id = body_data.get('id')
+
+            ciudad = Ciudad.objects.get(id=id)
+
+            nombre = body_data.get('nombre')
+
+            # Convertir nombre y ubicación a mayúsculas
+            nombre = nombre.upper()
+
+            # Actualizar los atributos de la cámara
+            ciudad.nombre = nombre
+
+            # Guardar los cambios en la base de datos
+            ciudad.save()
+
+            return JsonResponse({'data': 'success'})
+        except Carpeta.DoesNotExist:
+            return JsonResponse({'error': 'La carpeta con el ID proporcionado no existe'}, status=404)
+    else:
+        return JsonResponse({'error': 'Esta vista solo acepta solicitudes POST'}, status=405)
+
+@csrf_exempt
+def admin_enviar_vincular(request):
+    id_dato = request.GET.get('id')
+    
+    # Obtener la ciudad consultada
+    ciudad_consultada = Ciudad.objects.get(pk=id_dato)
+    
+    # Obtener todas las ciudades excepto la consultada
+    ciudades = Ciudad.objects.exclude(pk=id_dato)
+    
+    # Obtener todas las ciudades vinculadas a la ciudad con el id dado
+    ciudades_vinculadas = CiudadVecina.objects.filter(
+        Q(origen_id=id_dato) | Q(destino_id=id_dato)
+    ).values_list('origen_id', 'destino_id')
+    
+    # Convertir las ciudades vinculadas en un conjunto único de ids
+    ciudades_vinculadas_ids = set()
+    for origen_id, destino_id in ciudades_vinculadas:
+        ciudades_vinculadas_ids.add(origen_id)
+        ciudades_vinculadas_ids.add(destino_id)
+    
+    # Generar la lista de ciudades con la descripción modificada según la vinculación
+    ciudades_list = []
+    for ciudad in ciudades:
+        c_serializado = {
+            'key': ciudad.id,
+            'title': ciudad.nombre,
+            'description': 1 if ciudad.id in ciudades_vinculadas_ids else 2,
+        }
+        ciudades_list.append(c_serializado)
+    
+    return JsonResponse({
+        'ciudades': ciudades_list
+    })
+
+@csrf_exempt
+def admin_recibir_datos(request):
+    if request.method == 'POST':
+        body_unicode = request.body.decode('utf-8')
+        body_data = json.loads(body_unicode)
+
+        # Obtener los datos de la solicitud
+        datos = body_data.get('datos')
+        id_dato = body_data.get('id')
+
+        print(f'Datos: {datos}, Id: {id_dato}')
+
+        # Validar si los datos están vacíos
+        if not datos:
+            return JsonResponse({'error': 'No se han proporcionado datos'})
+
+        # Obtener las ciudades vecinas actuales como una lista plana de destinos
+        ciudades_vecinas_actuales = list(CiudadVecina.objects.filter(origen_id=id_dato).values_list('destino_id', flat=True))
+
+        if ciudades_vecinas_actuales:
+            print(f"Ciudades vecinas actuales: {ciudades_vecinas_actuales}")
+
+            # Convertir los datos a un conjunto para facilitar la comparación
+            datos_set = set(datos)
+
+            print(f"Datos recibidos: {datos_set}")
+
+            # Crear nuevas vinculaciones o eliminar las existentes según los datos recibidos
+            for ciudad_id in datos_set:
+                if ciudad_id in ciudades_vecinas_actuales:
+                    ciudades_vecinas_actuales.remove(ciudad_id)
+                    print(f'Id: {ciudad_id}')
+                else:
+                    # Crear una nueva vinculación
+                    if CiudadVecina.objects.create(origen_id=id_dato, destino_id=ciudad_id):
+                        print(f"Se ha creado una nueva vinculación entre {id_dato} y {ciudad_id}")
+
+            # Eliminar las vinculaciones que quedaron en ciudades_vecinas_actuales
+            CiudadVecina.objects.filter(origen_id=id_dato, destino_id__in=ciudades_vecinas_actuales).delete()
+            print("Vinculaciones eliminadas:", ciudades_vecinas_actuales)
+
+        else:
+            # Si no hay ciudades vecinas actuales, crear las nuevas vinculaciones
+            for ciudad_id in datos:
+                # Crear una nueva vinculación
+                if CiudadVecina.objects.create(origen_id=id_dato, destino_id=ciudad_id):
+                    print(f"Primer if Se ha creado una nueva vinculación entre {id_dato} y {ciudad_id}")
+
+        return JsonResponse({'data': 'success'})
+
+@csrf_exempt   
+def admin_vincular_camaras(request):
+    id_dato = request.GET.get('id')
+
+    todas_las_carpetas = Carpeta.objects.all()
+
+    carpetas_asociadas = list(CarpetaUsuario.objects.filter(usuario_id=id_dato).values_list('carpeta_id', flat=True))
+
+    carpetas_list = []
+
+    # Iterar sobre todas las carpetas disponibles
+    for carpeta in todas_las_carpetas:
+        nombre_camara = carpeta.nombre.split('/')[-2]
+        if carpeta.id in carpetas_asociadas:
+            # La carpeta está asociada al usuario
+            descripcion = '1'
+        else:
+            # La carpeta no está asociada al usuario
+            descripcion = '2'
+        # Agregar la carpeta serializada a la lista
+        carpetas_list.append({
+            'key': carpeta.id,
+            'title': nombre_camara,
+            'description': descripcion
+        })
+
+    return JsonResponse({'carpetas': carpetas_list})
+
+@csrf_exempt
+def admin_recibir_camaras(request):
+    if request.method == 'POST':
+        body_unicode = request.body.decode('utf-8')
+        body_data = json.loads(body_unicode)
+
+        # Obtener los datos de la solicitud
+        datos = body_data.get('datos')
+        id_dato = body_data.get('id')
+
+        print(f'Datos: {datos}, Id: {id_dato}')
+
+        # Validar si los datos están vacíos
+        if not datos:
+            return JsonResponse({'error': 'No se han proporcionado datos'})
+
+        # Obtener las cámaras actualmente asociadas al usuario
+        carpetas_actuales = list(CarpetaUsuario.objects.filter(usuario_id=id_dato).values_list('carpeta_id', flat=True))
+
+        if carpetas_actuales:
+            print(f"Carpetas actuales: {carpetas_actuales}")
+
+            # Convertir los datos a un conjunto para facilitar la comparación
+            datos_set = set(datos)
+
+            print(f"Datos recibidos: {datos_set}")
+
+            # Identificar las carpetas que se quitaron de la lista de datos
+            carpetas_a_eliminar = set(carpetas_actuales) - datos_set
+
+            if carpetas_a_eliminar:
+                # Eliminar las vinculaciones de las carpetas que ya no están en la lista de datos
+                CarpetaUsuario.objects.filter(usuario_id=id_dato, carpeta_id__in=carpetas_a_eliminar).delete()
+                print("Vinculaciones eliminadas:", carpetas_a_eliminar)
+
+            # Crear nuevas vinculaciones o mantener las existentes según los datos recibidos
+            for id in datos_set:
+                if id not in carpetas_actuales:
+                    # Crear una nueva vinculación
+                    CarpetaUsuario.objects.create(carpeta_id=id, usuario_id=id_dato)
+                    print(f"Se ha creado una nueva vinculación entre usuario: {id_dato} y carpeta: {id}")
+
+        else:
+            # Si no hay cámaras asociadas actualmente, crear las nuevas vinculaciones
+            for id in datos:
+                # Crear una nueva vinculación
+                CarpetaUsuario.objects.create(carpeta_id=id, usuario_id=id_dato)
+                print(f"Se ha creado una nueva vinculación entre usuario: {id_dato} y carpeta: {id}")
+
+        return JsonResponse({'data': 'success'})
+
+from django.utils.encoding import smart_str
+
+@csrf_exempt
+def mi_vista(request):
+    datos = [
+        {'Nombre': 'Juan', 'Edad': 30, 'Ciudad': 'Ciudad A'},
+        {'Nombre': 'María', 'Edad': 25, 'Ciudad': 'Ciudad B'},
+        {'Nombre': 'Carlos', 'Edad': 35, 'Ciudad': 'Ciudad C'},
+    ]
+    datos2 = [
+        {'Nombre': 'Ana', 'Edad': 30, 'Ciudad': 'Ciudad A'},
+        {'Nombre': 'Francisco', 'Edad': 25, 'Ciudad': 'Ciudad B'},
+        {'Nombre': 'Jose', 'Edad': 35, 'Ciudad': 'Ciudad C'},
+    ]
+    datos3 = conteo1()
+
+    exportador = Exportar([datos, datos2, datos3])
+
+    nombre_archivo = 'datos.xlsx'
+    exportador.exportar_excel(nombre_archivo)
+
+    with open(nombre_archivo, 'rb') as f:
+        contenido = f.read()
+
+    respuesta = HttpResponse(contenido, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    respuesta['Content-Disposition'] = 'attachment; filename={}'.format(smart_str(nombre_archivo))
+
+    return respuesta
+
+def conteo1():
+    resultado_consulta = (
+        Carpeta.objects
+        .filter()  
+        .annotate(cantidad_registros=Count('registro'))  
+        .values('nombre', 'cantidad_registros')  # Seleccionar los campos deseados
+    )
+
+    # Construir la respuesta
+    arreglo_respuesta = []
+    for item in resultado_consulta:
+        carpeta_nombre_completo = item['nombre']
+        carpeta_nombre = carpeta_nombre_completo.split('/')[2]  # Obtener el último segmento del nombre de la carpeta
+        arreglo_respuesta.append({'Carpeta': carpeta_nombre, 'Numero total de registros': item['cantidad_registros']})
+
+    return arreglo_respuesta

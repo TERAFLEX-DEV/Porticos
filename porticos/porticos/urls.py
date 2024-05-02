@@ -58,5 +58,13 @@ urlpatterns = [
     path('admin_ver_ciudades/', views.admin_ver_ciudades),
     path('admin_enviar_datos', views.admin_enviar_datos),
     path('admin_editar_camaras/', views.admin_editar_camara),
-
+    path('admin_crear_ciudades/', views.admin_crear_ciudades),
+    path('admin_ver_ciudades_buscador', views.admin_ver_ciudades_buscador),
+    path('admin_enviar_datos_ciudad', views.admin_enviar_datos_ciudad),
+    path('admin_editar_ciudad/', views.admin_editar_ciudad),
+    path('admin_enviar_vincular', views.admin_enviar_vincular),
+    path('admin_recibir_datos/', views.admin_recibir_datos),
+    path('admin_vincular_camaras', views.admin_vincular_camaras),
+    path('admin_recibir_camaras/', views.admin_recibir_camaras),
+    path('prueba_exportar/', views.mi_vista),
 ]
