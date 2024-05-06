@@ -72,3 +72,10 @@ class CiudadVecina(models.Model):
     def __str__(self):
         return self.origen
 
+class Fallo(models.Model):
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE)
+    fecha_hora = models.DateTimeField()
+    carpeta = models.ForeignKey(Carpeta, on_delete=models.CASCADE)
+
+    def formato_fh_fallo(self):
+        return self.fecha_hora.strftime('%d/%m/%Y %H:%M:%S')

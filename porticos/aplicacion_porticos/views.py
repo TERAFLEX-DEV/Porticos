@@ -532,7 +532,7 @@ def ver_imagen_alerta(request):
 from datetime import datetime
 from django.db.models import Count
 from datetime import datetime
-from .models import Carpeta, CarpetaUsuario, Registro
+from .models import Carpeta, CarpetaUsuario, Fallo, Registro
 from django.db.models import Q
 
 @csrf_exempt
@@ -598,6 +598,8 @@ def ver_imagen_infraccion(request):
 def admin_ver_usuarios(request):
 
     username = request.GET.get('username')
+
+    time.sleep(1)
 
     if(username):
         usuario = User.objects.filter(is_superuser=0, username__icontains=username)
@@ -696,6 +698,8 @@ def admin_crear_usuario(request):
 @csrf_exempt
 def admin_ver_camaras(request):
 
+    time.sleep(1)
+
     camara = request.GET.get('camara')
 
     carpeta = Carpeta.objects.filter(nombre__icontains=camara).values('id','nombre','ubicacion','ciudad__nombre')
@@ -741,6 +745,7 @@ def eliminar_camara(request):
     
 @csrf_exempt
 def admin_ver_ciudades(request):
+    time.sleep(1)
 # Obtener todas las ciudades
     ciudades = Ciudad.objects.all()
 
@@ -1110,46 +1115,203 @@ def admin_recibir_camaras(request):
 
 from django.utils.encoding import smart_str
 
+# @csrf_exempt
+# def mi_vista(request):
+#     id_dato = request.GET.get('id')
+#     datos1 = conteo1()
+#     datos2 = conteo2(id_dato)
+
+#     exportador = Exportar([
+#         datos1['arreglo'], 
+#         datos2['patentes_detalle'], 
+#         datos2['infracciones_detalle'], 
+#         datos2['fallos_detalle']
+#     ])
+
+#     nombre_archivo = 'datos.xlsx'
+#     exportador.exportar_excel(nombre_archivo)
+
+#     with open(nombre_archivo, 'rb') as f:
+#         contenido = f.read()
+
+#     respuesta = HttpResponse(contenido, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+#     respuesta['Content-Disposition'] = 'attachment; filename={}'.format(smart_str(nombre_archivo))
+
+#     return respuesta
+
+import time
+
 @csrf_exempt
-def mi_vista(request):
-    datos = [
-        {'Nombre': 'Juan', 'Edad': 30, 'Ciudad': 'Ciudad A'},
-        {'Nombre': 'María', 'Edad': 25, 'Ciudad': 'Ciudad B'},
-        {'Nombre': 'Carlos', 'Edad': 35, 'Ciudad': 'Ciudad C'},
-    ]
-    datos2 = [
-        {'Nombre': 'Ana', 'Edad': 30, 'Ciudad': 'Ciudad A'},
-        {'Nombre': 'Francisco', 'Edad': 25, 'Ciudad': 'Ciudad B'},
-        {'Nombre': 'Jose', 'Edad': 35, 'Ciudad': 'Ciudad C'},
-    ]
-    datos3 = conteo1()
+def admin_conteo_datos(request):
 
-    exportador = Exportar([datos, datos2, datos3])
+    time.sleep(1)
 
-    nombre_archivo = 'datos.xlsx'
-    exportador.exportar_excel(nombre_archivo)
+    id_dato = request.GET.get('id')
 
-    with open(nombre_archivo, 'rb') as f:
-        contenido = f.read()
+    print(f'Dashboard conteo de datos')
 
-    respuesta = HttpResponse(contenido, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    respuesta['Content-Disposition'] = 'attachment; filename={}'.format(smart_str(nombre_archivo))
+    datos1 = conteo1()
+    datos3 = conteo3()
 
-    return respuesta
+    return JsonResponse({'datos3':datos3, 'datos1':datos1}, safe=False)
 
 def conteo1():
-    resultado_consulta = (
-        Carpeta.objects
-        .filter()  
-        .annotate(cantidad_registros=Count('registro'))  
-        .values('nombre', 'cantidad_registros')  # Seleccionar los campos deseados
+    patentes = Registro.objects.filter(infraccion=1).count()
+    fallos = Fallo.objects.all().count()
+    infracciones = Registro.objects.filter(infraccion__in=[2, 3, 4]).count()
+
+    arreglo = [
+        {'value': patentes, 'name': 'Cantidad global patentes'},
+        {'value': fallos, 'name': 'Cantidad global fallos'},
+        {'value': infracciones, 'name': 'Cantidad global infracciones'}
+    ]
+
+    return {'arreglo':arreglo}
+
+@csrf_exempt
+def conteo2(request):
+    id = request.GET.get('id')
+
+    patentes = Registro.objects.filter(infraccion=1, carpeta__ciudad__id=id).count()
+    fallos = Fallo.objects.filter(carpeta__ciudad__id=id).count()
+    infracciones = Registro.objects.filter(infraccion__in=[2, 3, 4], carpeta__ciudad__id=id).count()
+
+    arreglo = [
+        {'value': patentes, 'name': 'Patentes'},
+        {'value': fallos, 'name': 'Fallos'},
+        {'value': infracciones, 'name': 'Infracciones'}
+    ]
+
+    patentes_detalle = (
+        Carpeta.objects  # Selecciona todos los objetos de la tabla Carpeta
+        .filter(ciudad__id=id)  # Filtra las carpetas por la ciudad con el ID dado
+        .annotate(
+            cantidad_registros=Count('registro', filter=Q(registro__infraccion_id=1))  # Cuenta solo los registros de tipo 1
+        )
+        .values('nombre', 'cantidad_registros')  # Selecciona los campos 'nombre' y 'cantidad_registros'
+    )
+
+    infracciones_detalle = (
+        Carpeta.objects  # Selecciona todos los objetos de la tabla Carpeta
+        .filter(ciudad__id=id)  # Filtra las carpetas por la ciudad con el ID dado
+        .annotate(
+            cantidad_infracciones=Count('registro', filter=Q(registro__infraccion_id__in=[2, 3, 4]))  # Cuenta los registros con tipos de infracción 2, 3 o 4
+        )
+        .values('nombre', 'cantidad_infracciones')  # Selecciona los campos 'nombre' y 'cantidad_infracciones'
+    )
+
+    fallos_detalle = (
+        Carpeta.objects  
+        .filter(ciudad__id=id)  
+        .annotate(
+            cantidad_fallos=Count('fallo')  
+        )
+        .values('nombre', 'cantidad_fallos')  
     )
 
     # Construir la respuesta
-    arreglo_respuesta = []
-    for item in resultado_consulta:
+    arreglo_patentes = []
+    for item in patentes_detalle:
         carpeta_nombre_completo = item['nombre']
         carpeta_nombre = carpeta_nombre_completo.split('/')[2]  # Obtener el último segmento del nombre de la carpeta
-        arreglo_respuesta.append({'Carpeta': carpeta_nombre, 'Numero total de registros': item['cantidad_registros']})
+        arreglo_patentes.append({'id': 'Patentes', 'Carpeta': carpeta_nombre, 'Numero total de registros': item['cantidad_registros']})
 
-    return arreglo_respuesta
+    arreglo_infracciones = []
+    for item in infracciones_detalle:
+        carpeta_nombre_completo = item['nombre']  # Obtener el último segmento del nombre de la carpeta
+        carpeta_nombre = carpeta_nombre_completo.split('/')[2]  # Obtener el último segmento del nombre de la carpeta
+        arreglo_infracciones.append({'id': 'Infracciones', 'Carpeta': carpeta_nombre, 'Numero total de registros': item['cantidad_infracciones']})
+
+    arreglo_fallos = []
+    for item in fallos_detalle:
+        carpeta_nombre_completo = item['nombre']
+        carpeta_nombre = carpeta_nombre_completo.split('/')[2]
+        arreglo_fallos.append({'id': 'Fallos', 'Carpeta': item['nombre'], 'Carpeta': carpeta_nombre, 'Numero total de registros': item['cantidad_fallos']})
+
+    return JsonResponse({'arreglo': arreglo, 'patentes_detalle': arreglo_patentes, 'infracciones_detalle': arreglo_infracciones, 'fallos_detalle':arreglo_fallos})
+
+def conteo3():
+    ciudades = Ciudad.objects.all()
+
+    arreglo_ciudades = []
+
+    for ciudad in ciudades:
+        arreglo_ciudad = {
+            'value': ciudad.id,
+            'label': ciudad.nombre
+        }
+        arreglo_ciudades.append(arreglo_ciudad)
+
+    return arreglo_ciudades
+
+from django.db.models.functions import ExtractHour
+
+def conteo4(request):
+    id_ciudad = request.GET.get('id')
+
+    patentes = Registro.objects.filter(infraccion=1, carpeta__ciudad__id=id_ciudad).count()
+    fallos = Fallo.objects.filter(carpeta__ciudad__id=id_ciudad).count()
+    infracciones = Registro.objects.filter(infraccion__in=[2, 3, 4], carpeta__ciudad__id=id_ciudad).count()
+
+    arreglo = [
+        {'value': patentes, 'name': 'Patentes'},
+        {'value': fallos, 'name': 'Fallos'},
+        {'value': infracciones, 'name': 'Infracciones'}
+    ]
+
+    # Conteo total por hora y carpeta
+    registros_por_hora_carpeta = (
+        Registro.objects
+        .filter(carpeta__ciudad__id=id_ciudad)
+        .annotate(hora=ExtractHour('fecha_hora'))
+        .values('hora', 'carpeta__nombre')
+        .annotate(cantidad_registros=Count('id'))
+        .order_by('hora', 'carpeta__nombre')
+    )
+
+    registros= []
+    for item in registros_por_hora_carpeta:
+        carpeta_nombre_completo = item['carpeta__nombre']
+        carpeta_nombre = carpeta_nombre_completo.split('/')[2]  # Obtener el último segmento del nombre de la carpeta
+        registros.append({'Hora': item['hora'], 'Carpeta': carpeta_nombre, 'Cantidad': item['cantidad_registros']})
+
+
+    # Conteo por tipo de infracción por hora y carpeta
+    infracciones_por_hora_carpeta = (
+        Registro.objects
+        .filter(infraccion__in=[2, 3, 4], carpeta__ciudad__id=id_ciudad)
+        .annotate(hora=ExtractHour('fecha_hora'))
+        .values('hora', 'carpeta__nombre')
+        .annotate(cantidad_infracciones=Count('id'))
+        .order_by('hora', 'carpeta__nombre')
+    )
+
+    infracciones= []
+    for item in infracciones_por_hora_carpeta:
+        carpeta_nombre_completo = item['carpeta__nombre']
+        carpeta_nombre = carpeta_nombre_completo.split('/')[2]  # Obtener el último segmento del nombre de la carpeta
+        infracciones.append({'Hora': item['hora'], 'Carpeta': carpeta_nombre, 'Cantidad': item['cantidad_infracciones']})
+
+
+    # Conteo de fallos por hora y carpeta
+    fallos_por_hora_carpeta = (
+        Fallo.objects
+        .filter(carpeta__ciudad__id=id_ciudad)
+        .annotate(hora=ExtractHour('fecha_hora'))
+        .values('hora', 'carpeta__nombre')
+        .annotate(cantidad_fallos=Count('id'))
+        .order_by('hora', 'carpeta__nombre')
+    )
+
+    fallos= []
+    for item in fallos_por_hora_carpeta:
+        carpeta_nombre_completo = item['carpeta__nombre']
+        carpeta_nombre = carpeta_nombre_completo.split('/')[2]  # Obtener el último segmento del nombre de la carpeta
+        fallos.append({'Hora': item['hora'], 'Carpeta': carpeta_nombre, 'Cantidad': item['cantidad_fallos']})
+
+    return JsonResponse({
+        'arreglo': arreglo,
+        'registros': registros,
+        'infracciones': infracciones,
+        'fallos': fallos
+    })

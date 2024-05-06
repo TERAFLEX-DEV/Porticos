@@ -16,7 +16,7 @@ from datetime import timedelta
 
 from aplicacion_porticos.consumers import PorticosConsumer
 
-from aplicacion_porticos.models import Carpeta, Infraccion, ListaNegra, Registro
+from aplicacion_porticos.models import Carpeta, Fallo, Infraccion, ListaNegra, Registro
 
 
 class MyHandler(FileSystemEventHandler):
@@ -33,7 +33,7 @@ class MyHandler(FileSystemEventHandler):
 
             # Verificamos si se obtuvieron valores válidos
             if archivo is None:
-                print("Archivo ignorado. No se procesará.")
+                print("Archivo contado como fallo. No se procesará.")
             else:
 
                 time.sleep(1)
@@ -154,7 +154,7 @@ class MyHandler(FileSystemEventHandler):
     def creacion_variables(self, event):
         archivo = event.src_path.split("/")[-1]  # Obtenemos nombre de la imagen
         carpeta = event.src_path.split("/")[2]    # Obtenemos el nombre de la carpeta
-        if "unknown" not in archivo.lower() and "plate" not in archivo.lower():  # Si el archivo no contiene unknown o contiene plate, entonces lo procesamo            
+        if "unknown" not in archivo.lower() and "plate" not in archivo.lower():  # Si el archivo no contiene unknown o contiene plate, entonces lo procesamos            
             #print(f'Ruta completa: {event.src_path}')
             ruta = event.src_path
             print(f'Auto detectado: {archivo}')
@@ -164,6 +164,28 @@ class MyHandler(FileSystemEventHandler):
             fecha_hora_str = fecha_hora_str[:14] #Obtenemos fecha y hora de la imagen
             print(f'Patente: {patente}')
             #print(f'Fecha y hora: {fecha_hora_str}')
+        elif "unknown" in archivo.lower():
+            print(f"Archivo desconocido: {archivo}")
+            path='C:/FTP/'+carpeta+'/'
+            carpeta_usuario = Carpeta.objects.get(nombre=path)
+            _, fecha_hora_str = archivo.split("_", 1)
+            fecha_hora_str = fecha_hora_str[:14] 
+            print(f'Fecha y hora: {fecha_hora_str}')
+
+            try:
+                # Convertir la cadena de fecha y hora en un objeto datetime
+                fecha_hora = datetime.strptime(fecha_hora_str, '%Y%m%d%H%M%S')
+                # Convertir el datetime a la zona horaria predeterminada de Django
+                fecha_hora = timezone.make_aware(fecha_hora)
+                # Formatear la fecha y hora en el formato de cadena esperado por Django
+                fecha_hora_str = fecha_hora.strftime('%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                print("La fecha y hora no están en el formato esperado.")
+
+            # Crear el objeto Fallo incluso si la fecha y hora no son válidas
+            fallo = Fallo.objects.create(usuario=self.usuario, fecha_hora=fecha_hora_str, carpeta=carpeta_usuario)
+            return None, None, None, None, None
+
         else:
             return None, None, None, None, None
 

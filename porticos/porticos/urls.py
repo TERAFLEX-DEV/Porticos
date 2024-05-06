@@ -66,5 +66,12 @@ urlpatterns = [
     path('admin_recibir_datos/', views.admin_recibir_datos),
     path('admin_vincular_camaras', views.admin_vincular_camaras),
     path('admin_recibir_camaras/', views.admin_recibir_camaras),
-    path('prueba_exportar/', views.mi_vista),
+    
+    
+    # path('prueba_exportar', views.mi_vista),
+    path('conteo1/', views.conteo1),
+
+    path('admin_conteo_datos', views.admin_conteo_datos),
+    path('admin_ciudades_camaras', views.conteo2),
+    path('admin_ciudades_horas', views.conteo4),
 ]
