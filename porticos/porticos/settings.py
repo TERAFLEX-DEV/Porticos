@@ -94,7 +94,7 @@ DATABASES = {
             'use_unicode': True,
             'isolation_level': 'repeatable read',  # Adjust isolation level as needed
         },
-        'CONN_MAX_AGE': 300,  # Adjust connection age as needed
+        'CONN_MAX_AGE': 1,  # Adjust connection age as needed
     }
 }
 
@@ -123,7 +123,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'UCT'
 
 USE_I18N = True
 

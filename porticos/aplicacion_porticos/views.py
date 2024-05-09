@@ -15,6 +15,17 @@ from django.shortcuts import redirect
 
 from aplicacion_porticos.export import Exportar
 
+
+from django.views.decorators.csrf import csrf_exempt
+from django.db import close_old_connections
+
+def close_db_connections(view_func):
+    def _wrapped_view(request, *args, **kwargs):
+        response = view_func(request, *args, **kwargs)
+        close_old_connections()  # Cerrar todas las conexiones después de cada solicitud
+        return response
+    return _wrapped_view
+
 # Create your views here.
 @csrf_exempt
 def get_csrf_token(request):
@@ -55,6 +66,7 @@ def login_user(request):
             return JsonResponse(data={'r':r, 'user':username, 'admin':isAdmin})
 
 @csrf_exempt
+@close_db_connections
 def logout_user(request):
 
     usuario = request.user
@@ -86,6 +98,7 @@ def iniciar_monitoreo_en_segundo_plano(usuario, carpetas):
     monitor_thread.start()
 
 @csrf_exempt
+@close_db_connections
 def porticos_monitoreo(request):
     usuario = request.user
     carpetas_usuario = CarpetaUsuario.objects.filter(usuario=usuario)
@@ -102,6 +115,7 @@ def porticos_monitoreo(request):
     return JsonResponse({'camaras': datos_camara})
 
 @csrf_exempt
+@close_db_connections
 def historial_patentes(request):
     usuario = request.user
     patente = request.GET.get('patente')
@@ -131,6 +145,7 @@ def historial_patentes(request):
     return JsonResponse({'registros': registros_serializados})
 
 @csrf_exempt
+@close_db_connections
 def ver_imagen(request):
     id_registro = request.GET.get('id')
     print(f'Id registro: {id_registro}')
@@ -158,6 +173,7 @@ def ver_imagen(request):
         return JsonResponse({'data':False})
     
 @csrf_exempt
+@close_db_connections
 def comentario_infraccion(request):
 
     id_registro = request.GET.get('id')
@@ -171,6 +187,7 @@ def comentario_infraccion(request):
         return JsonResponse({'comentario': False})
 
 @csrf_exempt
+@close_db_connections
 def lista_negra(request):
     patente = request.GET.get('patente')
     print(f'Patente: {patente}')
@@ -187,6 +204,7 @@ def lista_negra(request):
     return JsonResponse({'lista': lista_serializable})
 
 @csrf_exempt
+@close_db_connections
 def registro_infraccion(request):
     patente = request.GET.get('patente')
     print(f'Patente a buscar: {patente}')
@@ -211,6 +229,7 @@ def registro_infraccion(request):
     return JsonResponse({'lista': lista_serializable})
 
 @csrf_exempt
+@close_db_connections
 def agregar_lista_negra(request):
     usuario = request.user
 
@@ -242,6 +261,7 @@ def agregar_lista_negra(request):
         return JsonResponse({'success': False, 'message': 'Método no permitido'})
 
 @csrf_exempt
+@close_db_connections
 def eliminar_lista_negra(request):
     id_dato = request.GET.get('id')
     usuario = request.user
@@ -268,6 +288,7 @@ def eliminar_lista_negra(request):
         return JsonResponse({'success': False, 'message': 'Método no permitido'})
 
 @csrf_exempt
+@close_db_connections
 def alerta_ciudad(request):
     usuario = request.user
     grupos_usuario = usuario.groups.all()
@@ -308,6 +329,7 @@ def alerta_ciudad(request):
 from aplicacion_porticos.consumers import PorticosConsumer
 
 @csrf_exempt
+@close_db_connections
 def notificacion_infraccion(request):
     usuario=request.user
     registros = Registro.objects.filter(
@@ -330,6 +352,7 @@ def notificacion_infraccion(request):
     return JsonResponse({'registros': registros_json})
 
 @csrf_exempt
+@close_db_connections
 def ciudades_vecinas(request):
 
     usuario = request.user
@@ -351,6 +374,7 @@ def ciudades_vecinas(request):
     return JsonResponse({'data': data})
 
 @csrf_exempt
+@close_db_connections
 def insertar_comentario(request):
     print(f'Vista ingreso comentario')
 
@@ -436,6 +460,7 @@ def noti(id_alerta, origen, destino, patente):
     asyncio.run(PorticosConsumer.enviar_notificacion_global(id_alerta, origen.nombre, destino.nombre, patente))
 
 @csrf_exempt
+@close_db_connections
 def grupo_usuario(request):
     print(f'Vista ingreso comentario')
 
@@ -459,6 +484,7 @@ def grupo_usuario(request):
     return JsonResponse({'ciudad': ciudad_nombre})
 
 @csrf_exempt
+@close_db_connections
 def visto_alerta(request):
     print(f'Usuario vio alerta')
     id_alerta = request.GET.get('id')
@@ -475,6 +501,7 @@ def visto_alerta(request):
         return JsonResponse({'error': 'Se requiere un ID de alerta'}, status=400)
     
 @csrf_exempt
+@close_db_connections
 def alerta_ciudad_noti(request):
     usuario = request.user
     grupos_usuario = usuario.groups.all()
@@ -503,6 +530,7 @@ def alerta_ciudad_noti(request):
         return JsonResponse({'error': 'El usuario no pertenece a ningún grupo'})
     
 @csrf_exempt
+@close_db_connections
 def ver_imagen_alerta(request):
     id_alerta = request.GET.get('id')
     print(f'Id registro: {id_alerta}')
@@ -536,6 +564,7 @@ from .models import Carpeta, CarpetaUsuario, Fallo, Registro
 from django.db.models import Q
 
 @csrf_exempt
+@close_db_connections
 def detalles_patentes(request):
     usuario_id = request.user.id
     
@@ -561,6 +590,7 @@ def detalles_patentes(request):
     return JsonResponse({'respuesta': arreglo_respuesta})
 
 @csrf_exempt
+@close_db_connections
 def ver_imagen_infraccion(request):
     id_infraccion = request.GET.get('id')
     print(f'Id registro: {id_infraccion}')
@@ -595,11 +625,10 @@ def ver_imagen_infraccion(request):
 ##########################################################
     
 @csrf_exempt
+@close_db_connections
 def admin_ver_usuarios(request):
 
     username = request.GET.get('username')
-
-    time.sleep(1)
 
     if(username):
         usuario = User.objects.filter(is_superuser=0, username__icontains=username)
@@ -651,6 +680,7 @@ def logout_usuarios(request):
         return JsonResponse({'data': 'success'})
 
 @csrf_exempt
+@close_db_connections
 def eliminar_usuario(request):
     id_dato = request.GET.get('id')
     print(f'Usuario a buscar: {id_dato}')
@@ -672,6 +702,7 @@ def eliminar_usuario(request):
         return JsonResponse({'success': False, 'message': 'Método no permitido'})
     
 @csrf_exempt
+@close_db_connections
 def admin_crear_usuario(request):
     if request.method == 'POST':
         # Obtener el cuerpo de la solicitud como un diccionario
@@ -696,33 +727,35 @@ def admin_crear_usuario(request):
         return JsonResponse({'data':'Usuario creado y agregado al grupo '+grupo.name})
     
 @csrf_exempt
+@close_db_connections
 def admin_ver_camaras(request):
-
-    time.sleep(1)
 
     camara = request.GET.get('camara')
 
-    carpeta = Carpeta.objects.filter(nombre__icontains=camara).values('id','nombre','ubicacion','ciudad__nombre')
+    if camara:
+        carpeta = Carpeta.objects.filter(nombre__icontains=camara).values('id', 'nombre', 'ubicacion', 'ciudad__nombre')
+    else:
+        carpeta = Carpeta.objects.all().values('id', 'nombre', 'ubicacion', 'ciudad__nombre')
 
-    carpetas= []
+    carpetas = []
 
     for c in carpeta:
-            
-        nombre_camara = c['nombre'].split('/')[-2]  # Obtener el último texto después de "/"
+        nombre_camara = c['nombre'].split('/')[-2]
 
         c_serializado ={
-            'id':c['id'],
+            'id': c['id'],
             'nombre': nombre_camara,
             'ubicacion': c['ubicacion'],
-            'ciudad':c['ciudad__nombre']
-            }
+            'ciudad': c['ciudad__nombre']
+        }
 
-        carpetas.append(c_serializado)  
+        carpetas.append(c_serializado)
 
 
     return JsonResponse({'carpetas':carpetas})
 
 @csrf_exempt
+@close_db_connections
 def eliminar_camara(request):
     id_dato = request.GET.get('id')
     print(f'Camara a buscar: {id_dato}')
@@ -744,10 +777,10 @@ def eliminar_camara(request):
         return JsonResponse({'success': False, 'message': 'Método no permitido'})
     
 @csrf_exempt
+@close_db_connections
 def admin_ver_ciudades(request):
-    time.sleep(1)
 # Obtener todas las ciudades
-    ciudades = Ciudad.objects.all()
+    ciudades = Ciudad.objects.all().values('nombre')
 
     # Verificar si hay ciudades disponibles
 
@@ -755,14 +788,15 @@ def admin_ver_ciudades(request):
 
     for c in ciudades:
         c_serializado = {
-            'value': c.nombre.lower(),
-            'label': c.nombre,
+            'value': c['nombre'].lower(),
+            'label': c['nombre'],
         }
         ciudades_serializadas.append(c_serializado)
 
     return JsonResponse({'ciudades': ciudades_serializadas})
     
 @csrf_exempt
+@close_db_connections
 def admin_crear_camara(request):
     if request.method == 'POST':
         # Obtener el cuerpo de la solicitud como un diccionario
@@ -790,6 +824,7 @@ def admin_crear_camara(request):
         return JsonResponse({'data':'Carpeta creada '+camara.nombre})
     
 @csrf_exempt
+@close_db_connections
 def admin_enviar_datos(request):
     id_dato = request.GET.get('id')
 
@@ -818,6 +853,7 @@ def admin_enviar_datos(request):
 
 
 @csrf_exempt
+@close_db_connections
 def admin_editar_camara(request):
     if request.method == 'POST':
         body_unicode = request.body.decode('utf-8')
@@ -860,6 +896,7 @@ def admin_editar_camara(request):
         return JsonResponse({'error': 'Esta vista solo acepta solicitudes POST'}, status=405)
 
 @csrf_exempt
+@close_db_connections
 def admin_crear_ciudades(request):
     if request.method == 'POST':
         # Obtener el cuerpo de la solicitud como un diccionario
@@ -878,30 +915,21 @@ def admin_crear_ciudades(request):
         return JsonResponse({'data':'Ciudad creada '+ciudad.nombre})
     
 @csrf_exempt
+@close_db_connections
 def admin_ver_ciudades_buscador(request):
+    ciudad_nombre = request.GET.get('ciudad')
 
-    ciudad = request.GET.get('ciudad')
-
-    if(ciudad):
-        ciudad = Ciudad.objects.filter(nombre__icontains=ciudad).values('id','nombre')
+    if ciudad_nombre:
+        ciudades_query = Ciudad.objects.filter(nombre__icontains=ciudad_nombre).values('id', 'nombre')
     else:
-        ciudad = Ciudad.objects.all().values('id','nombre')
+        ciudades_query = Ciudad.objects.all().values('id', 'nombre')
 
-    ciudades= []
+    ciudades = [{'id': c['id'], 'nombre': c['nombre']} for c in ciudades_query]
 
-    for c in ciudad:
-
-        c_serializado ={
-            'id':c['id'],
-            'nombre': c['nombre'],
-            }
-
-        ciudades.append(c_serializado)  
-
-
-    return JsonResponse({'ciudades':ciudades})
+    return JsonResponse({'ciudades': ciudades})
 
 @csrf_exempt
+@close_db_connections
 def admin_enviar_datos_ciudad(request):
     id_dato = request.GET.get('id')
 
@@ -921,6 +949,7 @@ def admin_enviar_datos_ciudad(request):
     return JsonResponse({'ciudades':ciudades})
 
 @csrf_exempt
+@close_db_connections
 def admin_editar_ciudad(request):
     if request.method == 'POST':
         body_unicode = request.body.decode('utf-8')
@@ -950,6 +979,7 @@ def admin_editar_ciudad(request):
         return JsonResponse({'error': 'Esta vista solo acepta solicitudes POST'}, status=405)
 
 @csrf_exempt
+@close_db_connections
 def admin_enviar_vincular(request):
     id_dato = request.GET.get('id')
     
@@ -985,6 +1015,7 @@ def admin_enviar_vincular(request):
     })
 
 @csrf_exempt
+@close_db_connections
 def admin_recibir_datos(request):
     if request.method == 'POST':
         body_unicode = request.body.decode('utf-8')
@@ -1035,6 +1066,7 @@ def admin_recibir_datos(request):
         return JsonResponse({'data': 'success'})
 
 @csrf_exempt   
+@close_db_connections
 def admin_vincular_camaras(request):
     id_dato = request.GET.get('id')
 
@@ -1063,6 +1095,7 @@ def admin_vincular_camaras(request):
     return JsonResponse({'carpetas': carpetas_list})
 
 @csrf_exempt
+@close_db_connections
 def admin_recibir_camaras(request):
     if request.method == 'POST':
         body_unicode = request.body.decode('utf-8')
@@ -1115,36 +1148,11 @@ def admin_recibir_camaras(request):
 
 from django.utils.encoding import smart_str
 
-# @csrf_exempt
-# def mi_vista(request):
-#     id_dato = request.GET.get('id')
-#     datos1 = conteo1()
-#     datos2 = conteo2(id_dato)
-
-#     exportador = Exportar([
-#         datos1['arreglo'], 
-#         datos2['patentes_detalle'], 
-#         datos2['infracciones_detalle'], 
-#         datos2['fallos_detalle']
-#     ])
-
-#     nombre_archivo = 'datos.xlsx'
-#     exportador.exportar_excel(nombre_archivo)
-
-#     with open(nombre_archivo, 'rb') as f:
-#         contenido = f.read()
-
-#     respuesta = HttpResponse(contenido, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-#     respuesta['Content-Disposition'] = 'attachment; filename={}'.format(smart_str(nombre_archivo))
-
-#     return respuesta
-
 import time
 
 @csrf_exempt
+@close_db_connections
 def admin_conteo_datos(request):
-
-    time.sleep(1)
 
     id_dato = request.GET.get('id')
 
@@ -1169,6 +1177,7 @@ def conteo1():
     return {'arreglo':arreglo}
 
 @csrf_exempt
+@close_db_connections
 def conteo2(request):
     id = request.GET.get('id')
 
@@ -1246,6 +1255,8 @@ def conteo3():
 
 from django.db.models.functions import ExtractHour
 
+@csrf_exempt
+@close_db_connections
 def conteo4(request):
     id_ciudad = request.GET.get('id')
 
@@ -1315,3 +1326,115 @@ def conteo4(request):
         'infracciones': infracciones,
         'fallos': fallos
     })
+
+@csrf_exempt
+@close_db_connections
+def datos_exportar(request):
+
+    ciudad = Ciudad.objects.all()
+    ciudades=[{'value':0, 'label':'TODOS'}]
+
+    for c in ciudad:
+        c_serializado = {
+            'value': c.id,
+            'label': c.nombre.upper(),
+        }
+        ciudades.append(c_serializado)
+
+    return JsonResponse({
+        'ciudades': ciudades
+    })
+    
+@csrf_exempt
+@close_db_connections
+def exportar(request):
+    if request.method == 'POST':
+        body_data = json.loads(request.body)
+        
+        id_ciudad = body_data.get('id')
+        fecha_inicio, fecha_fin = body_data.get('fecha')
+        
+        fecha_inicio = f'{fecha_inicio} 00:00:00'
+        fecha_fin = f'{fecha_fin} 23:59:59'
+        
+        datos1 = conteo_datos(id_ciudad, fecha_inicio, fecha_fin)
+            
+        ciudad = Ciudad.objects.filter(id=id_ciudad).values('nombre').first()
+            
+        if id_ciudad==0:
+            ciudad='TODAS las ciudades'
+        else:
+            ciudad = ciudad['nombre']
+        
+        exportador = Exportar([
+            {
+                'Registros globales':datos1['registros_globales'],
+                'Infracciones globales':datos1['infracciones_globales'],
+                'Fallos globales':datos1['fallos_globales']
+            },
+            {'Hola':123}
+            ], ciudad, fecha_inicio, fecha_fin)
+
+        nombre_archivo = 'datos.xlsx'
+        exportador.exportar_excel(nombre_archivo)
+
+        # Leer el contenido del archivo Excel
+        with open(nombre_archivo, 'rb') as f:
+            contenido = f.read()
+
+        # Crear la respuesta HTTP con el contenido del archivo adjunto
+        respuesta = HttpResponse(contenido, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        respuesta['Content-Disposition'] = 'attachment; filename={}'.format(smart_str(nombre_archivo))
+
+        return respuesta
+    
+def conteo_datos(id_ciudad, fecha_inicio, fecha_fin):
+    if id_ciudad == 0 : 
+        registros_globales = Registro.objects.filter(fecha_hora__range=(fecha_inicio, fecha_fin), infraccion=1).count()
+        infracciones_globales = Registro.objects.filter(infraccion__in=[2, 3, 4], fecha_hora__range=(fecha_inicio, fecha_fin)).count()
+        fallos_globales = Fallo.objects.filter(fecha_hora__range=(fecha_inicio, fecha_fin)).count()
+            
+        print(f'Filtrar por todo')
+    elif id_ciudad != 0:  
+        registros_globales = Registro.objects.filter(fecha_hora__range=(fecha_inicio, fecha_fin), infraccion=1, carpeta__ciudad_id=id_ciudad).count()
+        infracciones_globales = Registro.objects.filter(infraccion__in=[2, 3, 4], fecha_hora__range=(fecha_inicio, fecha_fin), carpeta__ciudad_id=id_ciudad).count()
+        fallos_globales = Fallo.objects.filter(fecha_hora__range=(fecha_inicio, fecha_fin), carpeta__ciudad_id=id_ciudad).count()
+            
+            
+    print(f'Filtrar por {id_ciudad}')
+        
+    response_data = {
+        'registros_globales':registros_globales,
+        'infracciones_globales':infracciones_globales,
+        'fallos_globales':fallos_globales
+    }
+    
+    
+    print(response_data)
+        
+    return response_data
+    
+def mi_vista(request):
+    
+    datos1 = conteo_datos(0, '2024-05-06', '2025-05-09')
+        
+    exportador = Exportar([
+            {
+                'Registros globales':datos1['registros_globales'],
+                'Infracciones globales':datos1['infracciones_globales'],
+                'Fallos globales':datos1['fallos_globales']
+            },
+            {'Hola':123}
+            ])
+
+
+    nombre_archivo = 'datos.xlsx'
+    exportador.exportar_excel(nombre_archivo)
+
+    with open(nombre_archivo, 'rb') as f:
+        contenido = f.read()
+
+    respuesta = HttpResponse(contenido, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    respuesta['Content-Disposition'] = 'attachment; filename={}'.format(smart_str(nombre_archivo))
+
+    return respuesta
