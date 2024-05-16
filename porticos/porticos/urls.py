@@ -20,6 +20,11 @@ from aplicacion_porticos import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    
+    ##########################################################
+    ##################### PANEL DE USUARIO ###################
+    ##########################################################
+    
     path('login/', views.login_user, name='login'),
     path('logout/', views.logout_user, name='logout'),
     path('csrf_endpoint/', views.get_csrf_token),
@@ -76,4 +81,13 @@ urlpatterns = [
     path('admin_ciudades_horas', views.conteo4),
     path('admin_datos_exportar/', views.datos_exportar),
     path('admin_exportar/', views.exportar),
+    
+    
+    ##########################################################
+    ################### PANEL DE FISCALIA ####################
+    ##########################################################
+    
+    path('historial_fiscalia',views.historial_fiscalia),
+    path('exportar_fiscalia/', views.exportar_fiscalia),
+    
 ]

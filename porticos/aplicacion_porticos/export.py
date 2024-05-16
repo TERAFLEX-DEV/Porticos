@@ -36,3 +36,4 @@ class Exportar:
             valor = datos[clave]  # Obtener el valor correspondiente a la clave
             hoja.cell(row=fila, column=1, value=clave)  # Escribir la clave en la primera columna
             hoja.cell(row=fila, column=2, value=valor)  # Escribir el valor en la segunda columna
+    

@@ -19,6 +19,8 @@ from aplicacion_porticos.export import Exportar
 from django.views.decorators.csrf import csrf_exempt
 from django.db import close_old_connections
 
+from aplicacion_porticos.export_fiscalia import ExportarFiscalia
+
 def close_db_connections(view_func):
     def _wrapped_view(request, *args, **kwargs):
         response = view_func(request, *args, **kwargs)
@@ -70,6 +72,8 @@ def login_user(request):
 def logout_user(request):
 
     usuario = request.user
+    
+    print(f'Cerrando sesion usuario {usuario.username}')
 
     logout(request)
     return JsonResponse({'message':'Success'})
@@ -121,7 +125,7 @@ def historial_patentes(request):
     patente = request.GET.get('patente')
     filtro = request.GET.get('filtro')
 
-    registros = Registro.objects.filter(usuario=usuario).values('id', 'patente', 'fecha_hora', 'infraccion_id', 'infraccion__descripcion').order_by('-fecha_hora')
+    registros = Registro.objects.filter(usuario=usuario).values('id', 'patente', 'fecha_hora', 'carpeta__nombre', 'infraccion_id', 'infraccion__descripcion').order_by('-fecha_hora')
 
     if patente:
         registros = registros.filter(patente__icontains=patente)
@@ -138,6 +142,7 @@ def historial_patentes(request):
             'id': registro['id'],
             'patente': registro['patente'],
             'fecha_hora': registro['fecha_hora'].strftime('%d/%m/%Y %H:%M:%S'),  # Formatear la fecha
+            'camara': registro['carpeta__nombre'],
             'infraccion_descripcion': registro['infraccion__descripcion']
         }
         registros_serializados.append(registro_serializado)
@@ -1167,11 +1172,19 @@ def conteo1():
     patentes = Registro.objects.filter(infraccion=1).count()
     fallos = Fallo.objects.all().count()
     infracciones = Registro.objects.filter(infraccion__in=[2, 3, 4]).count()
+    
+    total = patentes+fallos+infracciones
+    
+    print(patentes, fallos, infracciones, total)
+    
+    p = (patentes*100)/total
+    i = (infracciones*100)/total
+    f = (fallos*100)/total
 
     arreglo = [
-        {'value': patentes, 'name': 'Cantidad global patentes'},
-        {'value': fallos, 'name': 'Cantidad global fallos'},
-        {'value': infracciones, 'name': 'Cantidad global infracciones'}
+        {'value': patentes, 'name': 'Cantidad global patentes', 'val': 'Porcentaje global patentes', 'porcentaje': p},
+        {'value': fallos, 'name': 'Cantidad global fallos', 'val': 'Porcentaje global fallos', 'porcentaje': f},
+        {'value': infracciones, 'name': 'Cantidad global infracciones', 'val': 'Porcentaje global infracciones', 'porcentaje': i},
     ]
 
     return {'arreglo':arreglo}
@@ -1188,7 +1201,7 @@ def conteo2(request):
     arreglo = [
         {'value': patentes, 'name': 'Patentes'},
         {'value': fallos, 'name': 'Fallos'},
-        {'value': infracciones, 'name': 'Infracciones'}
+        {'value': infracciones, 'name': 'Infracciones' }
     ]
 
     patentes_detalle = (
@@ -1358,6 +1371,7 @@ def exportar(request):
         fecha_fin = f'{fecha_fin} 23:59:59'
         
         datos1 = conteo_datos(id_ciudad, fecha_inicio, fecha_fin)
+        datos2 = conteo_datos2(id_ciudad, fecha_inicio, fecha_fin)
             
         ciudad = Ciudad.objects.filter(id=id_ciudad).values('nombre').first()
             
@@ -1366,13 +1380,22 @@ def exportar(request):
         else:
             ciudad = ciudad['nombre']
         
+        print(datos1)
+        print(datos2)
+        
+        print('--------')
+        
+        print(datos2['datos'])
+        
         exportador = Exportar([
             {
                 'Registros globales':datos1['registros_globales'],
                 'Infracciones globales':datos1['infracciones_globales'],
                 'Fallos globales':datos1['fallos_globales']
             },
-            {'Hola':123}
+            
+               datos2['datos']
+            
             ], ciudad, fecha_inicio, fecha_fin)
 
         nombre_archivo = 'datos.xlsx'
@@ -1409,10 +1432,57 @@ def conteo_datos(id_ciudad, fecha_inicio, fecha_fin):
         'fallos_globales':fallos_globales
     }
     
-    
-    print(response_data)
         
     return response_data
+
+def conteo_datos2(id_ciudad, inicio, fin):
+    datos = {}
+
+    if id_ciudad == 0:
+        patentes_detalle = Carpeta.objects.filter(registro__fecha_hora__range=(inicio, fin)).annotate(
+            cantidad_registros=Count('registro', filter=Q(registro__infraccion_id=1))).values('nombre', 'cantidad_registros')
+
+        infracciones_detalle = Carpeta.objects.filter(registro__fecha_hora__range=(inicio, fin)).annotate(
+            cantidad_infracciones=Count('registro', filter=Q(registro__infraccion_id__in=[2, 3, 4]))).values('nombre', 'cantidad_infracciones')
+
+        fallos_detalle = Carpeta.objects.filter(fallo__fecha_hora__range=(inicio, fin)).annotate(
+            cantidad_fallos=Count('fallo')).values('nombre', 'cantidad_fallos')
+
+    else:
+        patentes_detalle = Carpeta.objects.filter(ciudad__id=id_ciudad, registro__fecha_hora__range=(inicio, fin)).annotate(
+            cantidad_registros=Count('registro', filter=Q(registro__infraccion_id=1))).values('nombre', 'cantidad_registros')
+
+        infracciones_detalle = Carpeta.objects.filter(ciudad__id=id_ciudad, registro__fecha_hora__range=(inicio, fin)).annotate(
+            cantidad_infracciones=Count('registro', filter=Q(registro__infraccion_id__in=[2, 3, 4]))).values('nombre', 'cantidad_infracciones')
+
+        fallos_detalle = Carpeta.objects.filter(ciudad__id=id_ciudad, fallo__fecha_hora__range=(inicio, fin)).annotate(
+            cantidad_fallos=Count('fallo')).values('nombre', 'cantidad_fallos')
+
+    datos['Registros Carpeta'] = 'Registros (R)'
+    for index, item in enumerate(patentes_detalle, start=1):
+        carpeta_nombre_completo = item['nombre']
+        carpeta_nombre = carpeta_nombre_completo.split('/')[2]  # Obtener el último segmento del nombre de la carpeta
+        datos[f'R - {carpeta_nombre}'] = item['cantidad_registros']
+
+    datos['Infracciones Carpeta'] = 'Infracciones (I)'
+    for index, item in enumerate(infracciones_detalle, start=1):
+        carpeta_nombre_completo = item['nombre']
+        carpeta_nombre = carpeta_nombre_completo.split('/')[2]  # Obtener el último segmento del nombre de la carpeta
+        datos[f'I - {carpeta_nombre}'] = item['cantidad_infracciones']
+    
+    datos['Fallos Carpeta'] = 'Fallos (F)'
+    for index, item in enumerate(fallos_detalle, start=1):
+        carpeta_nombre_completo = item['nombre']
+        carpeta_nombre = carpeta_nombre_completo.split('/')[2]  # Obtener el último segmento del nombre de la carpeta
+        datos[f'F - {carpeta_nombre}'] = item['cantidad_fallos']
+        
+    arreglo={
+        'datos':datos
+    }
+
+    return arreglo
+
+
     
 def mi_vista(request):
     
@@ -1438,3 +1508,90 @@ def mi_vista(request):
     respuesta['Content-Disposition'] = 'attachment; filename={}'.format(smart_str(nombre_archivo))
 
     return respuesta
+
+
+    ##########################################################
+    ################### PANEL DE FISCALIA ####################
+    ##########################################################
+    
+    
+@csrf_exempt
+@close_db_connections
+def historial_fiscalia(request):
+    patente = request.GET.get('patente')
+    filtro = request.GET.get('filtro')
+    
+    print(f'Buscando por {patente} y {filtro}')
+
+    registros = Registro.objects.all().values('id', 'patente', 'fecha_hora', 'carpeta__nombre', 'infraccion_id', 'infraccion__descripcion').order_by('-fecha_hora')
+
+    if patente:
+        registros = registros.filter(patente__icontains=patente)
+
+    elif filtro == '1':
+        registros = registros
+
+    elif filtro:
+        registros = registros.filter(infraccion=filtro)
+
+    registros_serializados = []
+    for registro in registros:
+        registro_serializado = {
+            'id': registro['id'],
+            'patente': registro['patente'],
+            'fecha_hora': registro['fecha_hora'].strftime('%d/%m/%Y %H:%M:%S'),  # Formatear la fecha
+            'camara': registro['carpeta__nombre'],
+            'infraccion_descripcion': registro['infraccion__descripcion']
+        }
+        registros_serializados.append(registro_serializado)
+
+    return JsonResponse({'registros': registros_serializados})
+
+@csrf_exempt
+@close_db_connections
+def exportar_fiscalia(request):
+    
+    if request.method == 'POST':
+        body_data = json.loads(request.body)
+        
+        patente = body_data.get('patente')
+    
+        try:
+            registros = list(Registro.objects.filter(patente=patente).values('usuario__username', 'fecha_hora', 'carpeta__nombre', 'infraccion__nombre').order_by('-fecha_hora'))
+
+            if not registros:
+                return JsonResponse({"error": "No se encontraron datos para exportar."}, status=404)
+
+            registros_serializados = []
+            for registro in registros:
+                carpeta_nombre_completo = registro['carpeta__nombre']
+                carpeta_nombre = carpeta_nombre_completo.split('/')[2]  
+                registro_serializado = {
+                        'Usuario': registro['usuario__username'],
+                        'Fecha y Hora': registro['fecha_hora'].strftime('%d/%m/%Y %H:%M:%S'),  # Formatear la fecha
+                        'Cámara': carpeta_nombre,
+                        'Infracción': registro['infraccion__nombre']
+                    }
+                registros_serializados.append(registro_serializado)
+
+            print(registros)
+
+            # Suponiendo que conteo_datos devuelve un diccionario o una lista de diccionarios
+            exportador = ExportarFiscalia([
+                registros_serializados
+            ])
+
+            nombre_archivo = 'datos.xlsx'
+            exportador.exportar_excel(nombre_archivo)
+
+            with open(nombre_archivo, 'rb') as f:
+                contenido = f.read()
+
+            # Crear la respuesta HTTP con el contenido del archivo adjunto
+            respuesta = HttpResponse(contenido, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            respuesta['Content-Disposition'] = 'attachment; filename={}'.format(smart_str(nombre_archivo))
+
+            return respuesta
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
