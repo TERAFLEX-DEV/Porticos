@@ -164,7 +164,7 @@ class MyHandler(FileSystemEventHandler):
             fecha_hora_str = fecha_hora_str[:14] #Obtenemos fecha y hora de la imagen
             print(f'Patente: {patente}')
             #print(f'Fecha y hora: {fecha_hora_str}')
-        elif "unknown" in archivo.lower():
+        else:
             print(f"Archivo desconocido: {archivo}")
             path='C:/FTP/'+carpeta+'/'
             carpeta_usuario = Carpeta.objects.get(nombre=path)
@@ -186,8 +186,7 @@ class MyHandler(FileSystemEventHandler):
             fallo = Fallo.objects.create(usuario=self.usuario, fecha_hora=fecha_hora_str, carpeta=carpeta_usuario)
             return None, None, None, None, None
 
-        else:
-            return None, None, None, None, None
+        
 
         return archivo, carpeta, patente, fecha_hora_str, ruta
 

@@ -33,6 +33,7 @@ def close_db_connections(view_func):
 def get_csrf_token(request):
     csrf_token = get_token(request)
     # Puedes enviar el token CSRF como parte de la respuesta JSON
+    print(f'Token: {csrf_token}')
     return JsonResponse({'csrf_token': csrf_token})
 
 @csrf_exempt
