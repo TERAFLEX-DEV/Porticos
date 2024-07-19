@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
 
 # Create your models here.
 class Ciudad(models.Model):
@@ -79,3 +79,11 @@ class Fallo(models.Model):
 
     def formato_fh_fallo(self):
         return self.fecha_hora.strftime('%d/%m/%Y %H:%M:%S')
+    
+class Device(models.Model):
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE)
+    token = models.TextField()
+    ciudad = models.ForeignKey(Group, on_delete=models.CASCADE)    
+
+    def __str__(self):
+        return self.token
